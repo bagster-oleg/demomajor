@@ -14,6 +14,11 @@ from app.db.models import cars
 
 DEFAULT_CANDIDATE_LIMIT = 30
 
+# Thresholds behind the two semantic preferences, kept in code (not guessed
+# by the LLM) so "экономичный"/"семейный" mean the same thing every time.
+ECONOMICAL_MAX_ENGINE_L = 1.6  # "экономичный" -> small engine, a real number
+FAMILY_MIN_SEATS = 5  # "семейный" -> room for a family
+
 
 def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT):
     conditions = [cars.c.is_active.is_(True)]
@@ -42,6 +47,12 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(cars.c.doors_count == filt.doors_count)
     if filt.owners_count_max is not None:
         conditions.append(cars.c.owners_count <= filt.owners_count_max)
+    if filt.economical:
+        # A real number (engine displacement) is the honest best proxy the
+        # feed supports - it has no fuel-consumption figures at all.
+        conditions.append(cars.c.engine_volume_l <= ECONOMICAL_MAX_ENGINE_L)
+    if filt.family_friendly:
+        conditions.append(cars.c.seats >= FAMILY_MIN_SEATS)
 
     # Heuristic ordering: within budget, a higher price usually means a
     # better-equipped trim, so surface those first; break ties by discount
@@ -68,9 +79,11 @@ def fetch_candidates(conn: Connection, filt: CarFilter, limit: int = DEFAULT_CAN
 _RELAX_FIELD_ORDER = [
     "doors_count",
     "owners_count_max",
+    "economical",
     "drive_type",
     "transmission_type",
     "run_max",
+    "family_friendly",
     "body_type",
     "year_min",
     "year_max",
@@ -79,9 +92,11 @@ _RELAX_FIELD_ORDER = [
 _RELAX_FIELD_LABELS = {
     "doors_count": "количество дверей",
     "owners_count_max": "число владельцев",
+    "economical": "экономичность",
     "drive_type": "привод",
     "transmission_type": "коробка передач",
     "run_max": "пробег",
+    "family_friendly": "вместимость (семейный)",
     "body_type": "тип кузова",
     "year_min": "год выпуска",
     "year_max": "год выпуска",

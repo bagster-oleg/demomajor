@@ -80,3 +80,32 @@ def test_relaxation_never_returns_duplicate_labels(conn):
     filt = CarFilter(mark_id="Kia", year_min=2025, year_max=2025, doors_count=3)
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert len(relaxed) == len(set(relaxed))
+
+
+def test_economical_filters_to_small_engine(conn):
+    _seed(conn)
+    # economical -> engine_volume_l <= 1.6. Fixture engines: 3.0 (Audi),
+    # 1.5, 1.6, 1.5, 1.5, 1.4, 2.0, 2.0, 2.0. So <=1.6 keeps exactly the
+    # 1.4/1.5/1.6 ones and excludes the 2.0s and the 3.0.
+    filt = CarFilter(economical=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) > 0
+    assert all(float(c["engine_volume_l"]) <= 1.6 for c in candidates)
+
+
+def test_family_friendly_filters_to_five_plus_seats(conn):
+    _seed(conn)
+    # family_friendly -> seats >= 5. The Audi A7 (4 seats) must be excluded.
+    filt = CarFilter(family_friendly=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert all(c["seats"] >= 5 for c in candidates)
+    assert "1937189" not in {c["unique_id"] for c in candidates}  # Audi A7, 4 seats
+
+
+def test_family_and_economical_compose(conn):
+    _seed(conn)
+    filt = CarFilter(family_friendly=True, economical=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert all(c["seats"] >= 5 and float(c["engine_volume_l"]) <= 1.6 for c in candidates)

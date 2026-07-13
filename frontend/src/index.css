@@ -502,6 +502,44 @@ body {
   font-weight: 600;
 }
 
+/* ---------- parsed-filter transparency chips ---------- */
+
+.parsed-filter {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 18px;
+}
+
+.parsed-filter__label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.parsed-filter__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.parsed-filter__chip {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  background: #eef4ff;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.parsed-filter__chip--fuzzy {
+  color: var(--text-muted);
+  background: var(--card-bg);
+  border: 1px dashed var(--border);
+  font-weight: 500;
+}
+
 .results-toolbar {
   display: flex;
   align-items: center;
@@ -701,4 +739,226 @@ body {
   color: var(--accent-dark);
   font-weight: 700;
   background: #eef4ff;
+}
+
+/* ---------- chat widget (embeddable site widget demo) ---------- */
+
+.cw-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 22px;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.28);
+}
+
+.cw-fab:hover {
+  background: #27272a;
+}
+
+.cw-fab__icon {
+  font-size: 18px;
+}
+
+.cw-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  height: 600px;
+  max-height: calc(100vh - 48px);
+  background: var(--card-bg);
+  border-radius: 18px;
+  box-shadow: 0 16px 48px rgba(16, 24, 40, 0.32);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--header-bg);
+  color: var(--header-text);
+}
+
+.cw-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cw-header__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+}
+
+.cw-header__close {
+  border: none;
+  background: none;
+  color: var(--header-muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.cw-header__close:hover {
+  color: var(--header-text);
+}
+
+.cw-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+}
+
+.cw-msg {
+  max-width: 85%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.cw-msg--bot {
+  align-self: flex-start;
+  background: var(--card-bg);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.cw-msg--user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.cw-msg--typing {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.cw-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cw-car {
+  display: flex;
+  gap: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.cw-car__photo {
+  width: 84px;
+  height: 64px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--border);
+}
+
+.cw-car__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cw-car__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.cw-car__price {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.cw-car__explanation {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.cw-car__link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.cw-car__link:hover {
+  text-decoration: underline;
+}
+
+.cw-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+.cw-input input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.cw-input input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.cw-input button {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text-h);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.cw-input button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

@@ -64,6 +64,9 @@ class CarRecord(BaseModel):
     doors_count: Optional[int] = None
     drive_type: Optional[str] = None
     transmission_type: Optional[str] = None
+    engine_volume_l: Optional[float] = None
+    power_hp: Optional[int] = None
+    seats: Optional[int] = None
     description: Optional[str] = None
     extras: Optional[str] = None
     images: list[str] = []
@@ -176,6 +179,41 @@ def _transmission_type(modification_id: Optional[str]) -> Optional[str]:
     return _TRANSMISSION_TO_LABEL[match.group(1).upper()]
 
 
+# Engine volume in litres, e.g. "3.0" / "1.5" in "1.5 CVT (105 л.с.)".
+_ENGINE_VOLUME_RE = re.compile(r"\b(\d\.\d)\b")
+# Engine power in horsepower, e.g. the 105 in "(105 л.с.)".
+_POWER_HP_RE = re.compile(r"\((\d+)\s*л\.?\s*с\.?\)", re.IGNORECASE)
+# Seat count from extras, e.g. "Количество мест: 5".
+_SEATS_RE = re.compile(r"Количество\s+мест\s*:?\s*(\d+)", re.IGNORECASE)
+
+
+def _engine_volume_l(modification_id: Optional[str]) -> Optional[float]:
+    """Engine displacement in litres, parsed from modification_id. It's a
+    real number stated in the feed text (e.g. "1.5 CVT (105 л.с.)"), just
+    not broken out into its own field - unlike fuel consumption, which the
+    feed does not carry at all."""
+    if not modification_id:
+        return None
+    match = _ENGINE_VOLUME_RE.search(modification_id)
+    return float(match.group(1)) if match else None
+
+
+def _power_hp(modification_id: Optional[str]) -> Optional[int]:
+    """Engine power in horsepower, parsed from the "(NNN л.с.)" marker."""
+    if not modification_id:
+        return None
+    match = _POWER_HP_RE.search(modification_id)
+    return int(match.group(1)) if match else None
+
+
+def _seats(extras: Optional[str]) -> Optional[int]:
+    """Seat count, parsed from the "Количество мест: N" entry in extras."""
+    if not extras:
+        return None
+    match = _SEATS_RE.search(extras)
+    return int(match.group(1)) if match else None
+
+
 def _contact(node: etree._Element) -> tuple[Optional[str], Optional[str], Optional[str]]:
     contact_info = node.find("contact_info")
     if contact_info is None:
@@ -207,6 +245,7 @@ def parse_car_node(node: etree._Element, city: str, feed_source: str) -> CarReco
 
     modification_id = _text(node, "modification_id")
     owners_number = _text(node, "owners_number")
+    extras = _text(node, "extras")
     contact_name, contact_phone, contact_hours = _contact(node)
 
     return CarRecord(
@@ -239,8 +278,11 @@ def parse_car_node(node: etree._Element, city: str, feed_source: str) -> CarReco
         doors_count=_int(node, "doors_count"),
         drive_type=_drive_type(modification_id),
         transmission_type=_transmission_type(modification_id),
+        engine_volume_l=_engine_volume_l(modification_id),
+        power_hp=_power_hp(modification_id),
+        seats=_seats(extras),
         description=_text(node, "description"),
-        extras=_text(node, "extras"),
+        extras=extras,
         images=_images(node),
         video=_text(node, "video"),
         poi_id=_text(node, "poi_id"),

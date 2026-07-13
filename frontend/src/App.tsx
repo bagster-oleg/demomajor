@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { fetchCities, fetchStats, searchCars } from './api';
 import { CarCard } from './components/CarCard';
+import { ChatWidget } from './components/ChatWidget';
 import { ComparisonTable } from './components/ComparisonTable';
+import { ParsedFilterChips } from './components/ParsedFilterChips';
 import type { CarResult, SearchResponse } from './types';
 
 const SUGGESTIONS = [
@@ -198,6 +200,8 @@ export default function App() {
           </div>
         )}
 
+        {response && !loading && !error && <ParsedFilterChips filter={response.parsed_filter} />}
+
         {hasSearched && !loading && !error && response?.results.length === 0 && (
           <p className="state-message">
             Ничего подходящего нет даже среди похожих вариантов — попробуйте изменить запрос.
@@ -266,6 +270,8 @@ export default function App() {
       {showComparison && comparisonCars.length >= 2 && (
         <ComparisonTable cars={comparisonCars} onClose={() => setShowComparison(false)} />
       )}
+
+      <ChatWidget />
     </div>
   );
 }

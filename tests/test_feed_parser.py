@@ -75,6 +75,25 @@ def test_transmission_type_derived_from_modification_id():
     assert kia_rio.transmission_type == "автомат"  # AT
 
 
+def test_engine_volume_power_and_seats_parsed():
+    records = parse_feed_file(FIXTURE, city="Москва")
+
+    audi = next(r for r in records if r.unique_id == "1937189")
+    assert audi.modification_id == "55 TFSI 3.0 AMT (340 л.с.) 4WD"
+    assert float(audi.engine_volume_l) == 3.0
+    assert audi.power_hp == 340
+    assert audi.seats == 4  # Audi A7 has "Количество мест: 4" in extras
+
+    kia_rio = next(r for r in records if r.unique_id == "1864081")
+    assert float(kia_rio.engine_volume_l) == 1.4  # "X-Line 1.4 AT (100 л.с.)"
+    assert kia_rio.power_hp == 100
+    assert kia_rio.seats == 5
+
+    porsche = next(r for r in records if r.unique_id == "1931764")
+    assert float(porsche.engine_volume_l) == 2.0  # "2.0 AMT (252 л.с.) 4WD"
+    assert porsche.power_hp == 252
+
+
 def test_contact_info_flattened():
     records = parse_feed_file(FIXTURE, city="Москва")
     audi = next(r for r in records if r.unique_id == "1937189")

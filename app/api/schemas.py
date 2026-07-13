@@ -22,6 +22,12 @@ class CarFilter(BaseModel):
     transmission_type: Optional[str] = None
     doors_count: Optional[int] = None
     owners_count_max: Optional[int] = None
+    # Semantic preferences that map to a deterministic filter over real
+    # parsed numbers, not to a made-up field: "семейный" -> seats >= 5,
+    # "экономичный" -> small engine (engine_volume_l <= threshold). See
+    # app/api/filter_sql.py for the exact thresholds.
+    family_friendly: Optional[bool] = None
+    economical: Optional[bool] = None
     # Leftover fuzzy part of the query that doesn't map to a structured
     # field (e.g. "для дачи с прицепом") - reserved for the optional
     # phase-5 pgvector rerank over description/extras, unused for now.
@@ -57,6 +63,9 @@ class CarResult(BaseModel):
     drive_type: Optional[str]
     transmission_type: Optional[str]
     doors_count: Optional[int]
+    engine_volume_l: Optional[float]
+    power_hp: Optional[int]
+    seats: Optional[int]
     year: int
     run: Optional[int]
     owners_number: Optional[str]

@@ -55,6 +55,12 @@ cars = Table(
     # (looks for a "4WD"/"AWD" marker). See app/etl/feed_parser.py::_drive_type.
     Column("drive_type", Text),
     Column("transmission_type", Text),
+    # Also parsed from modification_id / extras rather than being their own
+    # feed fields, but from real numbers stated in the text (engine volume,
+    # power, seat count) - see app/etl/feed_parser.py.
+    Column("engine_volume_l", Numeric(3, 1)),
+    Column("power_hp", SmallInteger),
+    Column("seats", SmallInteger),
     Column("description", Text),
     Column("extras", Text),
     Column("images", ARRAY(Text)),

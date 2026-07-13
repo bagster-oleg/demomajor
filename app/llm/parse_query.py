@@ -41,6 +41,14 @@ def _build_tool_schema(
                 "transmission_type": _enum_or_string(known_transmissions),
                 "doors_count": {"type": ["integer", "null"]},
                 "owners_count_max": {"type": ["integer", "null"]},
+                "family_friendly": {
+                    "type": ["boolean", "null"],
+                    "description": "true, если клиент хочет семейный/вместительный автомобиль",
+                },
+                "economical": {
+                    "type": ["boolean", "null"],
+                    "description": "true, если клиент хочет экономичный автомобиль / небольшой расход",
+                },
                 "free_text_intent": {
                     "type": ["string", "null"],
                     "description": "нечёткая часть запроса, не сводимая к остальным полям",

@@ -166,6 +166,20 @@ export function CarCard({ car, compareChecked, onToggleCompare, compareDisabled 
               <dd>{car.drive_type}</dd>
             </div>
           )}
+          {car.engine_volume_l != null && (
+            <div>
+              <dt>Двигатель</dt>
+              <dd>
+                {car.engine_volume_l} л{car.power_hp != null ? ` · ${car.power_hp} л.с.` : ''}
+              </dd>
+            </div>
+          )}
+          {car.seats != null && (
+            <div>
+              <dt>Мест</dt>
+              <dd>{car.seats}</dd>
+            </div>
+          )}
           {car.owners_number && (
             <div>
               <dt>Владельцы</dt>

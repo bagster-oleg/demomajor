@@ -18,6 +18,9 @@ export interface CarResult {
   drive_type: string | null;
   transmission_type: string | null;
   doors_count: number | null;
+  engine_volume_l: number | null;
+  power_hp: number | null;
+  seats: number | null;
   year: number;
   run: number | null;
   owners_number: string | null;
@@ -51,6 +54,8 @@ export interface CarFilter {
   transmission_type: string | null;
   doors_count: number | null;
   owners_count_max: number | null;
+  family_friendly: boolean | null;
+  economical: boolean | null;
   free_text_intent: string | null;
 }
 
