@@ -12,7 +12,10 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+
+EMBEDDING_DIM = 384  # sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 
 metadata = MetaData()
 
@@ -67,6 +70,11 @@ cars = Table(
     Column("online_view_available", Boolean),
     Column("with_nds", Boolean),
     Column("url", Text),
+    # Phase-5 rerank only: reorders the already SQL-filtered candidate list
+    # by similarity to the fuzzy leftover part of a query ("для дачи с
+    # прицепом") - never used as the primary filter. Built from
+    # description+extras, see app/vector/embed.py.
+    Column("embedding", Vector(EMBEDDING_DIM)),
     Column("raw", JSONB, nullable=False),
     Column("feed_source", Text, nullable=False),
     Column("first_seen_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),

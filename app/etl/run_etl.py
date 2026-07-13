@@ -14,6 +14,7 @@ from urllib.request import urlopen
 
 from app.config import settings
 from app.db.session import engine
+from app.etl.embed_cars import embed_city_cars
 from app.etl.feed_parser import parse_feed_bytes
 from app.etl.upsert import sync_city_feed
 
@@ -45,10 +46,11 @@ def run() -> int:
 
         with engine.begin() as conn:
             summary = sync_city_feed(conn, records, city)
+            embedded = embed_city_cars(conn, city)
 
         logger.info(
-            "city=%s upserted=%s deactivated=%s parsed=%s",
-            summary["city"], summary["upserted"], summary["deactivated"], len(records),
+            "city=%s upserted=%s deactivated=%s parsed=%s embedded=%s",
+            summary["city"], summary["upserted"], summary["deactivated"], len(records), embedded,
         )
         total_upserted += summary["upserted"]
         total_deactivated += summary["deactivated"]

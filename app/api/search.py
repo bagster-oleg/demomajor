@@ -11,6 +11,7 @@ from app.api.filter_sql import (
 from app.api.schemas import CarResult, Discounts, SearchRequest, SearchResponse
 from app.llm.parse_query import parse_query
 from app.llm.rank_explain import rank_and_explain
+from app.vector.rerank import rerank_by_free_text_intent
 
 
 def _build_car_result(row: dict, explanation: str) -> CarResult:
@@ -77,6 +78,12 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
             total_candidates_after_sql_filter=0,
             results=[],
         )
+
+    # Phase-5 rerank: reorders the SQL-filtered candidates by similarity to
+    # whatever fuzzy leftover the query-parsing step couldn't map to a real
+    # column (e.g. "для дачи с прицепом") - on top of the SQL filter, never
+    # instead of it, and never dropping a candidate.
+    candidates = rerank_by_free_text_intent(filt.free_text_intent, candidates)
 
     ranked = rank_and_explain(request.query, candidates, request.limit)
 

@@ -31,7 +31,7 @@ class CarFilter(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     city: Optional[str] = None
-    limit: int = Field(default=5, ge=1, le=10)
+    limit: int = Field(default=3, ge=1, le=10)
 
 
 class Discounts(BaseModel):
