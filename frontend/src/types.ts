@@ -14,19 +14,26 @@ export interface CarResult {
   modification_id: string | null;
   complectation_name: string | null;
   body_type: string | null;
+  color: string | null;
   drive_type: string | null;
   transmission_type: string | null;
+  doors_count: number | null;
   year: number;
   run: number | null;
   owners_number: string | null;
   state: string | null;
+  custom: string | null;
+  extras: string | null;
   price: number;
   currency: string | null;
   discounts: Discounts;
   price_after_max_discount: number;
   city: string;
   poi_id: string | null;
+  contact_phone: string | null;
+  contact_hours: string | null;
   images: string[];
+  video: string | null;
   url: string | null;
   explanation: string;
 }
@@ -51,6 +58,8 @@ export interface SearchResponse {
   parsed_filter: CarFilter;
   city_used: string | null;
   total_candidates_after_sql_filter: number;
+  exact_match: boolean;
+  relaxed_fields: string[];
   results: CarResult[];
 }
 

@@ -142,7 +142,22 @@ export default function App() {
         {error && <p className="state-message state-message--error">{error}</p>}
 
         {hasSearched && !loading && !error && response?.results.length === 0 && (
-          <p className="state-message">Пока нет результатов, попробуйте изменить запрос.</p>
+          <p className="state-message">
+            Ничего подходящего нет даже среди похожих вариантов — попробуйте изменить запрос.
+          </p>
+        )}
+
+        {response && response.results.length > 0 && !response.exact_match && (
+          <p className="state-message state-message--notice">
+            Точного совпадения по всем условиям нет — показаны похожие варианты из наличия
+            {response.relaxed_fields.length > 0 && (
+              <>
+                {' '}
+                (без учёта: {response.relaxed_fields.join(', ')})
+              </>
+            )}
+            .
+          </p>
         )}
 
         {response && response.results.length > 0 && (

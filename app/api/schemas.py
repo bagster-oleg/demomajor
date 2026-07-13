@@ -50,19 +50,26 @@ class CarResult(BaseModel):
     modification_id: Optional[str]
     complectation_name: Optional[str]
     body_type: Optional[str]
+    color: Optional[str]
     drive_type: Optional[str]
     transmission_type: Optional[str]
+    doors_count: Optional[int]
     year: int
     run: Optional[int]
     owners_number: Optional[str]
     state: Optional[str]
+    custom: Optional[str]
+    extras: Optional[str]
     price: float
     currency: Optional[str]
     discounts: Discounts
     price_after_max_discount: float
     city: str
     poi_id: Optional[str]
+    contact_phone: Optional[str]
+    contact_hours: Optional[str]
     images: list[str]
+    video: Optional[str]
     url: Optional[str]
     explanation: str
 
@@ -71,6 +78,8 @@ class SearchResponse(BaseModel):
     parsed_filter: CarFilter
     city_used: Optional[str]
     total_candidates_after_sql_filter: int
+    exact_match: bool
+    relaxed_fields: list[str]
     results: list[CarResult]
 
 

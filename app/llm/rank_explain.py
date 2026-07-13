@@ -65,16 +65,34 @@ def _tool_schema() -> dict:
     }
 
 
-def rank_and_explain(query: str, candidates: list[dict], limit: int) -> list[dict]:
+def rank_and_explain(
+    query: str, candidates: list[dict], limit: int, relaxed_fields: list[str] | None = None
+) -> list[dict]:
     """Ask the LLM to pick and explain up to `limit` candidates.
 
     Returns a list of {"unique_id", "explanation"} dicts in the order the
     LLM ranked them. Caller is responsible for joining back to full DB rows.
+
+    `relaxed_fields`, when non-empty, means the SQL step found nothing for
+    the exact filter and had to loosen these constraints to find anything -
+    the explanation must say so honestly rather than pretend it's a perfect
+    match.
     """
     if not candidates:
         return []
 
     compact = [_compact_candidate(row) for row in candidates]
+
+    mismatch_note = ""
+    if relaxed_fields:
+        fields_str = ", ".join(relaxed_fields)
+        mismatch_note = (
+            f"\n\nВАЖНО: точного совпадения по всем условиям запроса в наличии нет. "
+            f"Чтобы показать хоть что-то, пришлось не учитывать: {fields_str}. "
+            f"В объяснении по каждому автомобилю честно укажи, чем именно он отличается "
+            f"от запроса клиента (например, другой тип кузова или бюджет выше указанного), "
+            f"а не только то, что в нём совпадает."
+        )
 
     response = get_client().messages.create(
         model=settings.anthropic_model,
@@ -88,6 +106,7 @@ def rank_and_explain(query: str, candidates: list[dict], limit: int) -> list[dic
                 "content": (
                     f"Запрос клиента: {query}\n\n"
                     f"Кандидаты (JSON):\n{json.dumps(compact, ensure_ascii=False)}"
+                    f"{mismatch_note}"
                 ),
             }
         ],

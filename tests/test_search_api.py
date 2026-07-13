@@ -87,15 +87,40 @@ def test_explicit_city_param_overrides_llm_parsed_city(seeded_cars):
 
 
 def test_search_with_no_sql_candidates_skips_llm_ranking(seeded_cars):
+    # price_max alone can't force zero results any more - the relaxation
+    # ladder (tests/test_filter_sql.py) will eventually drop the budget
+    # entirely and find something. City is the one dimension that's never
+    # relaxed, so an impossible city is the only reliable way to get a
+    # true "nothing in stock at all" response.
     with patch("app.api.search.parse_query") as mock_parse, patch(
         "app.api.search.rank_and_explain"
     ) as mock_rank:
-        mock_parse.return_value = CarFilter(city="Москва", price_max=1)
+        mock_parse.return_value = CarFilter(city="Владивосток")
 
-        resp = client.post("/api/search", json={"query": "машина за рубль"})
+        resp = client.post("/api/search", json={"query": "любая машина во Владивостоке"})
 
     assert resp.status_code == 200
     data = resp.json()
     assert data["results"] == []
     assert data["total_candidates_after_sql_filter"] == 0
+    assert data["exact_match"] is False
     mock_rank.assert_not_called()
+
+
+def test_search_with_relaxed_filter_reports_exact_match_false(seeded_cars):
+    with patch("app.api.search.parse_query") as mock_parse, patch(
+        "app.api.search.rank_and_explain"
+    ) as mock_rank:
+        mock_parse.return_value = CarFilter(city="Москва", mark_id="Kia", doors_count=3)
+        mock_rank.return_value = [{"unique_id": "1864081", "explanation": "ok"}]
+
+        resp = client.post("/api/search", json={"query": "kia с 3 дверями"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exact_match"] is False
+    assert "количество дверей" in data["relaxed_fields"]
+    # rank_and_explain must be told what was relaxed so it can be honest
+    # about the mismatch instead of pretending it's a perfect match.
+    mock_rank.assert_called_once()
+    assert mock_rank.call_args[0][3] == ["количество дверей"]

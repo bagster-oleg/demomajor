@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { CarResult } from '../types';
 
 const priceFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
 const runFormatter = new Intl.NumberFormat('ru-RU');
+const MAX_EXTRAS_SHOWN = 6;
 
 function formatPrice(value: number): string {
   return `${priceFormatter.format(value)} ₽`;
@@ -12,7 +14,53 @@ function formatRun(value: number | null): string {
   return `${runFormatter.format(value)} км`;
 }
 
+function PhotoGallery({ images, alt }: { images: string[]; alt: string }) {
+  const [index, setIndex] = useState(0);
+
+  if (images.length === 0) {
+    return (
+      <div className="car-card__photo">
+        <div className="car-card__photo-placeholder">Нет фото</div>
+      </div>
+    );
+  }
+
+  function go(delta: number) {
+    setIndex((i) => (i + delta + images.length) % images.length);
+  }
+
+  return (
+    <div className="car-card__photo">
+      <img src={images[index]} alt={alt} loading="lazy" />
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            className="car-card__photo-nav car-card__photo-nav--prev"
+            onClick={() => go(-1)}
+            aria-label="Предыдущее фото"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="car-card__photo-nav car-card__photo-nav--next"
+            onClick={() => go(1)}
+            aria-label="Следующее фото"
+          >
+            ›
+          </button>
+          <span className="car-card__photo-count">
+            {index + 1} / {images.length}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function CarCard({ car }: { car: CarResult }) {
+  const [showAllExtras, setShowAllExtras] = useState(false);
   const { discounts } = car;
   const hasDiscount = discounts.max_discount > 0;
 
@@ -31,15 +79,16 @@ export function CarCard({ car }: { car: CarResult }) {
   const subtitle = [car.modification_id, car.complectation_name].filter(Boolean).join(' · ');
   const location = [car.city, car.poi_id].filter(Boolean).join(' · ');
 
+  const extrasList = (car.extras ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const visibleExtras = showAllExtras ? extrasList : extrasList.slice(0, MAX_EXTRAS_SHOWN);
+  const hiddenExtrasCount = extrasList.length - visibleExtras.length;
+
   return (
     <article className="car-card">
-      <div className="car-card__photo">
-        {car.images.length > 0 ? (
-          <img src={car.images[0]} alt={title} loading="lazy" />
-        ) : (
-          <div className="car-card__photo-placeholder">Нет фото</div>
-        )}
-      </div>
+      <PhotoGallery images={car.images} alt={title} />
 
       <div className="car-card__body">
         <h3 className="car-card__title">{title}</h3>
@@ -74,6 +123,18 @@ export function CarCard({ car }: { car: CarResult }) {
               <dd>{car.body_type}</dd>
             </div>
           )}
+          {car.color && (
+            <div>
+              <dt>Цвет</dt>
+              <dd>{car.color}</dd>
+            </div>
+          )}
+          {car.doors_count != null && (
+            <div>
+              <dt>Дверей</dt>
+              <dd>{car.doors_count}</dd>
+            </div>
+          )}
           {car.transmission_type && (
             <div>
               <dt>КПП</dt>
@@ -92,15 +153,53 @@ export function CarCard({ car }: { car: CarResult }) {
               <dd>{car.owners_number}</dd>
             </div>
           )}
+          {car.custom && (
+            <div>
+              <dt>Таможня</dt>
+              <dd>{car.custom}</dd>
+            </div>
+          )}
         </dl>
+
+        {extrasList.length > 0 && (
+          <div className="car-card__extras">
+            {visibleExtras.map((item) => (
+              <span key={item} className="car-card__extra-tag">
+                {item}
+              </span>
+            ))}
+            {hiddenExtrasCount > 0 && (
+              <button
+                type="button"
+                className="car-card__extra-tag car-card__extra-tag--more"
+                onClick={() => setShowAllExtras(true)}
+              >
+                +{hiddenExtrasCount} ещё
+              </button>
+            )}
+          </div>
+        )}
 
         {location && <div className="car-card__location">{location}</div>}
 
-        {car.url && (
-          <a className="car-card__link" href={car.url} target="_blank" rel="noreferrer">
-            Смотреть на сайте →
-          </a>
-        )}
+        <div className="car-card__links">
+          {car.url && (
+            <a className="car-card__link" href={car.url} target="_blank" rel="noreferrer">
+              Смотреть на сайте →
+            </a>
+          )}
+          {car.video && (
+            <a className="car-card__link" href={car.video} target="_blank" rel="noreferrer">
+              Видеообзор →
+            </a>
+          )}
+          {car.contact_phone && (
+            <a className="car-card__link" href={`tel:${car.contact_phone}`}>
+              {car.contact_phone}
+              {car.contact_hours ? ` (${car.contact_hours})` : ''}
+            </a>
+          )}
+        </div>
 
         <p className="car-card__explanation">{car.explanation}</p>
       </div>

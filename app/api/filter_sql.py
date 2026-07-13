@@ -61,6 +61,97 @@ def fetch_candidates(conn: Connection, filt: CarFilter, limit: int = DEFAULT_CAN
     return [dict(row) for row in rows]
 
 
+# Order to drop constraints in when the exact filter matches nothing, from
+# least to most likely to be the thing the user actually cares about.
+# `city` and `free_text_intent` are never touched here: city is an explicit
+# UI choice, and free_text_intent was never a SQL condition to begin with.
+_RELAX_FIELD_ORDER = [
+    "doors_count",
+    "owners_count_max",
+    "drive_type",
+    "transmission_type",
+    "run_max",
+    "body_type",
+    "year_min",
+    "year_max",
+]
+
+_RELAX_FIELD_LABELS = {
+    "doors_count": "количество дверей",
+    "owners_count_max": "число владельцев",
+    "drive_type": "привод",
+    "transmission_type": "коробка передач",
+    "run_max": "пробег",
+    "body_type": "тип кузова",
+    "year_min": "год выпуска",
+    "year_max": "год выпуска",
+    "price_max": "бюджет",
+    "mark_id": "марка",
+}
+
+_PRICE_WIDEN_FACTOR = 1.2
+
+
+def fetch_candidates_with_relaxation(
+    conn: Connection, filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT
+) -> tuple[list[dict], bool, list[str]]:
+    """Try the filter exactly as given. If nothing matches, relax it one
+    constraint at a time (deterministic, cheapest-first order) until
+    something in stock matches - so "no results" only happens when nothing
+    in the current inventory is even remotely close, and the user always
+    gets real cars, never invented ones, plus an honest account of what
+    was loosened to find them.
+
+    Returns (candidates, exact_match, relaxed_field_labels).
+    """
+    candidates = fetch_candidates(conn, filt, limit)
+    if candidates:
+        return candidates, True, []
+
+    relaxed = filt.model_copy()
+    relaxed_labels: list[str] = []
+
+    def _dedupe(labels: list[str]) -> list[str]:
+        return list(dict.fromkeys(labels))
+
+    for field in _RELAX_FIELD_ORDER:
+        if getattr(relaxed, field) is not None:
+            relaxed = relaxed.model_copy(update={field: None})
+            relaxed_labels.append(_RELAX_FIELD_LABELS[field])
+            candidates = fetch_candidates(conn, relaxed, limit)
+            if candidates:
+                return candidates, False, _dedupe(relaxed_labels)
+
+    if relaxed.price_max is not None:
+        widened = relaxed.model_copy(update={"price_max": relaxed.price_max * _PRICE_WIDEN_FACTOR})
+        candidates = fetch_candidates(conn, widened, limit)
+        relaxed_labels = relaxed_labels + [_RELAX_FIELD_LABELS["price_max"]]
+        if candidates:
+            return candidates, False, _dedupe(relaxed_labels)
+        relaxed = widened
+
+    if relaxed.mark_id is not None:
+        relaxed = relaxed.model_copy(update={"mark_id": None})
+        relaxed_labels = relaxed_labels + [_RELAX_FIELD_LABELS["mark_id"]]
+        candidates = fetch_candidates(conn, relaxed, limit)
+        if candidates:
+            return candidates, False, _dedupe(relaxed_labels)
+
+    # Absolute last resort: a 20% widen still isn't enough for a budget
+    # that's just unrealistic for anything in stock (e.g. a typo or a
+    # placeholder value) - drop the price bound entirely rather than
+    # returning nothing, as long as city (never touched) still matches
+    # something.
+    if relaxed.price_max is not None or relaxed.price_min is not None:
+        relaxed = relaxed.model_copy(update={"price_max": None, "price_min": None})
+        relaxed_labels = relaxed_labels + [_RELAX_FIELD_LABELS["price_max"]]
+        candidates = fetch_candidates(conn, relaxed, limit)
+        if candidates:
+            return candidates, False, _dedupe(relaxed_labels)
+
+    return [], False, _dedupe(relaxed_labels)
+
+
 def fetch_distinct_cities(conn: Connection) -> list[str]:
     stmt = (
         select(cars.c.city)
