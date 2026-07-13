@@ -109,3 +109,22 @@ def fetch_distinct_transmissions(conn: Connection) -> list[str]:
         .order_by(cars.c.transmission_type)
     )
     return [row[0] for row in conn.execute(stmt).all()]
+
+
+def fetch_stats(conn: Connection, city: str | None = None) -> dict:
+    """Real counts for the homepage subtitle ("живой каталог: N моделей в
+    наличии") - never a hardcoded number."""
+    conditions = [cars.c.is_active.is_(True)]
+    if city:
+        conditions.append(cars.c.city == city)
+
+    total_cars = conn.execute(
+        select(func.count()).select_from(cars).where(and_(*conditions))
+    ).scalar_one()
+
+    total_models = conn.execute(
+        select(func.count(func.distinct(func.concat(cars.c.mark_id, "|", cars.c.folder_id))))
+        .where(and_(*conditions))
+    ).scalar_one()
+
+    return {"total_cars": total_cars, "total_models": total_models}

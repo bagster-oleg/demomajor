@@ -1,4 +1,4 @@
-import type { SearchResponse } from './types';
+import type { SearchResponse, StatsResponse } from './types';
 
 // Empty by default: in production the SPA and API share the same origin
 // (nginx proxies /api/ to the backend on major.aifield.ru). Set
@@ -9,6 +9,15 @@ export async function fetchCities(): Promise<string[]> {
   const res = await fetch(`${API_BASE}/api/cities`);
   if (!res.ok) {
     throw new Error(`Не удалось загрузить список городов (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchStats(city: string | null): Promise<StatsResponse> {
+  const params = city ? `?city=${encodeURIComponent(city)}` : '';
+  const res = await fetch(`${API_BASE}/api/stats${params}`);
+  if (!res.ok) {
+    throw new Error(`Не удалось загрузить статистику (${res.status})`);
   }
   return res.json();
 }

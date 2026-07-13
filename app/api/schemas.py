@@ -72,3 +72,8 @@ class SearchResponse(BaseModel):
     city_used: Optional[str]
     total_candidates_after_sql_filter: int
     results: list[CarResult]
+
+
+class StatsResponse(BaseModel):
+    total_cars: int
+    total_models: int

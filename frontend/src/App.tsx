@@ -1,11 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { fetchCities, searchCars } from './api';
+import { useEffect, useState, type KeyboardEvent } from 'react';
+import { fetchCities, fetchStats, searchCars } from './api';
 import { CarCard } from './components/CarCard';
 import type { SearchResponse } from './types';
+
+const SUGGESTIONS = [
+  'Семье с двумя детьми, до 2.5 млн, чтобы надёжно и просторно',
+  'Первая машина, механика, до 900 тысяч',
+  'Кроссовер с полным приводом для зимы',
+];
 
 export default function App() {
   const [cities, setCities] = useState<string[]>([]);
   const [city, setCity] = useState('');
+  const [totalModels, setTotalModels] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,15 +25,20 @@ export default function App() {
       .catch(() => setCities([]));
   }, []);
 
-  async function handleSearch(event: FormEvent) {
-    event.preventDefault();
-    if (!query.trim() || loading) return;
+  useEffect(() => {
+    fetchStats(city || null)
+      .then((stats) => setTotalModels(stats.total_models))
+      .catch(() => setTotalModels(null));
+  }, [city]);
+
+  async function runSearch(text: string) {
+    if (!text.trim() || loading) return;
 
     setLoading(true);
     setError(null);
     setHasSearched(true);
     try {
-      const result = await searchCars(query.trim(), city || null);
+      const result = await searchCars(text.trim(), city || null);
       setResponse(result);
     } catch (err) {
       setResponse(null);
@@ -36,55 +48,110 @@ export default function App() {
     }
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      runSearch(query);
+    }
+  }
+
+  function handleSuggestionClick(text: string) {
+    setQuery(text);
+    runSearch(text);
+  }
+
   return (
-    <div className="page">
-      <header className="page__header">
-        <h1>Подбор авто — демо</h1>
-        <p className="page__subtitle">Опишите, какая машина нужна, своими словами</p>
+    <div className="app">
+      <header className="site-header">
+        <div className="site-header__inner">
+          <div className="site-header__logo">
+            MAJOR<span>.</span>
+          </div>
+          <div className="site-header__nav">ИИ-подбор автомобиля</div>
+          <div className="site-header__badge">Demo</div>
+        </div>
       </header>
 
-      <form className="search-bar" onSubmit={handleSearch}>
-        <select
-          className="search-bar__city"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          aria-label="Город"
+      <main className="hero">
+        <p className="hero__eyebrow">
+          Подбор из наличия ·{' '}
+          <select
+            className="hero__city-select"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            aria-label="Город"
+          >
+            <option value="">Все города</option>
+            {cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </p>
+
+        <h1 className="hero__title">
+          Опишите словами, какая нужна машина — подберём из наличия Major
+        </h1>
+
+        <p className="hero__subtitle">
+          Живой каталог: {totalModels != null ? <strong>{totalModels}</strong> : '…'} моделей в
+          наличии. Расскажите про бюджет, задачи и семью — не про марку и объём двигателя.
+        </p>
+
+        <form
+          className="search-card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            runSearch(query);
+          }}
         >
-          <option value="">Все города</option>
-          {cities.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          <textarea
+            className="search-card__input"
+            placeholder='например: семейный кроссовер до 3 млн, полный привод, чтобы зимой уверенно и не жрал бензин'
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={3}
+            aria-label="Запрос"
+          />
+          <div className="search-card__footer">
+            <span className="search-card__hint">Enter — подобрать · Shift+Enter — новая строка</span>
+            <button type="submit" className="search-card__button" disabled={loading}>
+              {loading ? 'Ищем…' : <>Подобрать →</>}
+            </button>
+          </div>
+        </form>
 
-        <input
-          type="text"
-          className="search-bar__query"
-          placeholder='например: "семейный кроссовер до 1.5 млн, автомат, не старше 2020"'
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Запрос"
-        />
-
-        <button type="submit" className="search-bar__button" disabled={loading}>
-          {loading ? 'Ищем…' : 'Найти'}
-        </button>
-      </form>
-
-      {error && <p className="state-message state-message--error">{error}</p>}
-
-      {hasSearched && !loading && !error && response?.results.length === 0 && (
-        <p className="state-message">Пока нет результатов, попробуйте изменить запрос.</p>
-      )}
-
-      {response && response.results.length > 0 && (
-        <div className="results">
-          {response.results.map((car) => (
-            <CarCard key={car.unique_id} car={car} />
+        <div className="suggestions">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="suggestion-chip"
+              onClick={() => handleSuggestionClick(s)}
+            >
+              {s}
+            </button>
           ))}
         </div>
-      )}
+      </main>
+
+      <section className="results-section">
+        {error && <p className="state-message state-message--error">{error}</p>}
+
+        {hasSearched && !loading && !error && response?.results.length === 0 && (
+          <p className="state-message">Пока нет результатов, попробуйте изменить запрос.</p>
+        )}
+
+        {response && response.results.length > 0 && (
+          <div className="results">
+            {response.results.map((car) => (
+              <CarCard key={car.unique_id} car={car} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

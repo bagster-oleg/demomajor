@@ -53,3 +53,8 @@ export interface SearchResponse {
   total_candidates_after_sql_filter: number;
   results: CarResult[];
 }
+
+export interface StatsResponse {
+  total_cars: number;
+  total_models: number;
+}
