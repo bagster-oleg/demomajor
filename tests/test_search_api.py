@@ -52,7 +52,7 @@ def test_search_returns_llm_selected_results_in_order(seeded_cars):
     with patch("app.api.search.parse_query") as mock_parse, patch(
         "app.api.search.rank_and_explain"
     ) as mock_rank:
-        mock_parse.return_value = CarFilter(city="Москва", body_type="Внедорожник 5 дв.")
+        mock_parse.return_value = (CarFilter(city="Москва", body_type="Внедорожник 5 дв."), [])
         mock_rank.return_value = [
             {"unique_id": "1865441", "explanation": "Кроссовер, один владелец, недорогой."},
             {"unique_id": "1862622", "explanation": "Кроссовер с полным приводом."},
@@ -74,7 +74,7 @@ def test_explicit_city_param_overrides_llm_parsed_city(seeded_cars):
     with patch("app.api.search.parse_query") as mock_parse, patch(
         "app.api.search.rank_and_explain"
     ) as mock_rank:
-        mock_parse.return_value = CarFilter(city="Санкт-Петербург")
+        mock_parse.return_value = (CarFilter(city="Санкт-Петербург"), [])
         mock_rank.return_value = [{"unique_id": "1937189", "explanation": "ok"}]
 
         resp = client.post(
@@ -95,7 +95,7 @@ def test_search_with_no_sql_candidates_skips_llm_ranking(seeded_cars):
     with patch("app.api.search.parse_query") as mock_parse, patch(
         "app.api.search.rank_and_explain"
     ) as mock_rank:
-        mock_parse.return_value = CarFilter(city="Владивосток")
+        mock_parse.return_value = (CarFilter(city="Владивосток"), [])
 
         resp = client.post("/api/search", json={"query": "любая машина во Владивостоке"})
 
@@ -111,7 +111,7 @@ def test_search_with_relaxed_filter_reports_exact_match_false(seeded_cars):
     with patch("app.api.search.parse_query") as mock_parse, patch(
         "app.api.search.rank_and_explain"
     ) as mock_rank:
-        mock_parse.return_value = CarFilter(city="Москва", mark_id="Kia", doors_count=3)
+        mock_parse.return_value = (CarFilter(city="Москва", mark_id="Kia", doors_count=3), [])
         mock_rank.return_value = [{"unique_id": "1864081", "explanation": "ok"}]
 
         resp = client.post("/api/search", json={"query": "kia с 3 дверями"})
@@ -124,3 +124,27 @@ def test_search_with_relaxed_filter_reports_exact_match_false(seeded_cars):
     # about the mismatch instead of pretending it's a perfect match.
     mock_rank.assert_called_once()
     assert mock_rank.call_args[0][2] == ["количество дверей"]
+
+
+def test_search_reports_not_exact_when_brand_silently_dropped(seeded_cars):
+    # Regression: "мерседес джип" - no Mercedes in stock. parse_query
+    # clamps mark_id to None and reports it as dropped; body_type alone
+    # then matches SUVs in stock via SQL on the first try (sql_exact_match
+    # would be True in isolation). The response must still say
+    # exact_match=False - the brand was never actually honored.
+    with patch("app.api.search.parse_query") as mock_parse, patch(
+        "app.api.search.rank_and_explain"
+    ) as mock_rank:
+        mock_parse.return_value = (
+            CarFilter(body_type="Внедорожник 5 дв."),
+            ["марка"],
+        )
+        mock_rank.return_value = [{"unique_id": "1862622", "explanation": "ok"}]
+
+        resp = client.post("/api/search", json={"query": "мерседес джип"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exact_match"] is False
+    assert "марка" in data["relaxed_fields"]
+    assert len(data["results"]) > 0

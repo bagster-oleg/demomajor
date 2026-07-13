@@ -118,6 +118,20 @@ def _sanitize_partial_update(raw: dict) -> dict:
     }
 
 
+# Human-readable labels for fields the clamp step can silently drop (e.g.
+# the model says mark_id="Mercedes" but there's no Mercedes in stock) - used
+# to tell the caller "this constraint was dropped before SQL ever ran" so
+# a query like "мерседес джип" can't come back reporting a perfect match
+# just because the SQL step, having lost the brand, happened to find SUVs.
+_CLAMP_FIELD_LABELS = {
+    "city": "город",
+    "mark_id": "марка",
+    "body_type": "тип кузова",
+    "drive_type": "привод",
+    "transmission_type": "коробка передач",
+}
+
+
 def _apply_clamping(
     filt: CarFilter,
     known_cities: list[str],
@@ -125,18 +139,27 @@ def _apply_clamping(
     known_marks: list[str],
     known_drive_types: list[str],
     known_transmissions: list[str],
-) -> CarFilter:
-    filt.city = _clamp_to_known(filt.city, known_cities)
-    filt.body_type = _clamp_to_known(filt.body_type, known_body_types)
-    filt.mark_id = _clamp_to_known(filt.mark_id, known_marks)
-    filt.drive_type = _clamp_to_known(
-        _normalize_synonym(filt.drive_type, _DRIVE_TYPE_SYNONYMS), known_drive_types
+) -> tuple[CarFilter, list[str]]:
+    dropped: list[str] = []
+
+    def _clamp_field(field: str, value: str | None, known_values: list[str]) -> str | None:
+        clamped = _clamp_to_known(value, known_values)
+        if value is not None and clamped is None:
+            dropped.append(_CLAMP_FIELD_LABELS[field])
+        return clamped
+
+    filt.city = _clamp_field("city", filt.city, known_cities)
+    filt.body_type = _clamp_field("body_type", filt.body_type, known_body_types)
+    filt.mark_id = _clamp_field("mark_id", filt.mark_id, known_marks)
+    filt.drive_type = _clamp_field(
+        "drive_type", _normalize_synonym(filt.drive_type, _DRIVE_TYPE_SYNONYMS), known_drive_types
     )
-    filt.transmission_type = _clamp_to_known(
+    filt.transmission_type = _clamp_field(
+        "transmission_type",
         _normalize_synonym(filt.transmission_type, _TRANSMISSION_SYNONYMS),
         known_transmissions,
     )
-    return filt
+    return filt, dropped
 
 
 def parse_query(
@@ -146,7 +169,12 @@ def parse_query(
     known_marks: list[str],
     known_drive_types: list[str],
     known_transmissions: list[str],
-) -> CarFilter:
+) -> tuple[CarFilter, list[str]]:
+    """Returns (filter, dropped_field_labels). `dropped_field_labels` lists
+    any field the model asked for that isn't a real value in the DB (e.g.
+    a brand we don't stock) and was therefore cleared before the SQL step -
+    the caller must treat that the same as an unsatisfied constraint, not
+    silently degrade to "matches everything on this field"."""
     tool = _build_tool_schema(
         known_cities, known_body_types, known_marks, known_drive_types, known_transmissions
     )
@@ -178,7 +206,7 @@ def refine_query(
     known_marks: list[str],
     known_drive_types: list[str],
     known_transmissions: list[str],
-) -> CarFilter:
+) -> tuple[CarFilter, list[str]]:
     """Update `base_filter` with a follow-up refinement ("а подешевле?",
     "только с автоматом") instead of re-parsing from scratch - the model is
     told to include only the fields the refinement actually changes, and

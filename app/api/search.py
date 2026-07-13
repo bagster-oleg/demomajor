@@ -71,7 +71,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     if request.previous_filter is not None:
         # Follow-up refinement ("а подешевле?") - update the existing
         # filter instead of re-parsing the whole conversation from scratch.
-        filt = refine_query(
+        filt, dropped_fields = refine_query(
             request.previous_filter,
             request.query,
             known_cities=known_cities,
@@ -81,7 +81,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
             known_transmissions=known_transmissions,
         )
     else:
-        filt = parse_query(
+        filt, dropped_fields = parse_query(
             request.query,
             known_cities=known_cities,
             known_body_types=known_body_types,
@@ -91,22 +91,34 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
         )
 
     # An explicit city selector on the UI always wins over whatever the LLM
-    # parsed out of the free-text query.
+    # parsed out of the free-text query - so a city dropped by the clamp
+    # (the model named a city with no stock) is moot once the UI supplies
+    # a real one.
     if request.city:
         filt.city = request.city
+        dropped_fields = [f for f in dropped_fields if f != "город"]
 
     # If nothing matches the filter exactly, this deterministically loosens
     # it (cheapest constraints first) until something in stock does, rather
     # than just returning "no results" - real cars, never invented ones,
     # with an honest account of what had to give.
-    candidates, exact_match, relaxed_fields = fetch_candidates_with_relaxation(conn, filt)
+    candidates, sql_exact_match, relaxed_fields = fetch_candidates_with_relaxation(conn, filt)
+
+    # A field the clamp step silently dropped (e.g. mark_id="Mercedes" - no
+    # Mercedes in stock, so it never became a SQL condition at all) must
+    # count as "not an exact match" too - otherwise a query like "мерседес
+    # джип" can come back reporting a perfect match just because the SQL
+    # step, having lost the brand, still found SUVs.
+    exact_match = sql_exact_match and not dropped_fields
+    all_relaxed_fields = list(dict.fromkeys(dropped_fields + relaxed_fields))
+
     if not candidates:
         return SearchResponse(
             parsed_filter=filt,
             city_used=filt.city,
             total_candidates_after_sql_filter=0,
             exact_match=exact_match,
-            relaxed_fields=relaxed_fields,
+            relaxed_fields=all_relaxed_fields,
             results=[],
         )
 
@@ -117,7 +129,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     candidates = rerank_by_free_text_intent(filt.free_text_intent, candidates)
 
     ranked = rank_and_explain(
-        request.query, candidates[:MAX_EXPLAINED_CANDIDATES], relaxed_fields
+        request.query, candidates[:MAX_EXPLAINED_CANDIDATES], all_relaxed_fields
     )
 
     candidates_by_id = {c["unique_id"]: c for c in candidates}
@@ -133,6 +145,6 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
         city_used=filt.city,
         total_candidates_after_sql_filter=len(candidates),
         exact_match=exact_match,
-        relaxed_fields=relaxed_fields,
+        relaxed_fields=all_relaxed_fields,
         results=results,
     )

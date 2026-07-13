@@ -8,6 +8,7 @@ from app.llm.parse_query import (
     _normalize_synonym,
     _DRIVE_TYPE_SYNONYMS,
     _TRANSMISSION_SYNONYMS,
+    parse_query,
     refine_query,
 )
 
@@ -77,7 +78,7 @@ def test_refine_query_merges_only_the_changed_field():
         mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
             {"price_max": 700_000}
         )
-        updated = refine_query(
+        updated, dropped = refine_query(
             base,
             "а подешевле?",
             known_cities=["Москва"],
@@ -92,6 +93,7 @@ def test_refine_query_merges_only_the_changed_field():
     # asked to (and didn't) repeat them.
     assert updated.mark_id == "Kia"
     assert updated.city == "Москва"
+    assert dropped == []
 
 
 def test_refine_query_explicit_null_clears_a_constraint():
@@ -100,7 +102,7 @@ def test_refine_query_explicit_null_clears_a_constraint():
         mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
             {"price_max": None}
         )
-        updated = refine_query(
+        updated, _dropped = refine_query(
             base,
             "сними ограничение по цене",
             known_cities=["Москва"],
@@ -126,7 +128,7 @@ def test_refine_query_string_literal_null_is_treated_as_real_none():
         mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
             {"price_max": "null"}
         )
-        updated = refine_query(
+        updated, _dropped = refine_query(
             base,
             "сними ограничение по цене",
             known_cities=["Москва"],
@@ -149,7 +151,7 @@ def test_refine_query_clamps_new_value_against_known_list():
         mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
             {"transmission_type": "Спортивная"}
         )
-        updated = refine_query(
+        updated, dropped = refine_query(
             base,
             "хочу что-то спортивное",
             known_cities=["Москва"],
@@ -163,3 +165,29 @@ def test_refine_query_clamps_new_value_against_known_list():
     # never match anything - the clamp safety net applies on the refine
     # path too, not just the initial parse.
     assert updated.transmission_type is None
+    assert dropped == ["коробка передач"]
+
+
+def test_parse_query_reports_dropped_field_when_brand_not_in_stock():
+    # Regression: "мерседес джип" - no Mercedes in stock. mark_id gets
+    # clamped to None (correct - never filter on a brand that can't
+    # exist), but that must be reported as a dropped constraint, not
+    # silently treated as "no brand preference". Otherwise the SQL step
+    # can find SUVs by body_type alone and the response claims a perfect
+    # match despite having ignored the brand entirely.
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {"mark_id": "Mercedes-Benz", "body_type": "Внедорожник 5 дв."}
+        )
+        filt, dropped = parse_query(
+            "мерседес джип",
+            known_cities=[],
+            known_body_types=["Внедорожник 5 дв."],
+            known_marks=["Kia", "Hyundai"],
+            known_drive_types=[],
+            known_transmissions=[],
+        )
+
+    assert filt.mark_id is None
+    assert filt.body_type == "Внедорожник 5 дв."
+    assert dropped == ["марка"]
