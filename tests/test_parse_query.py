@@ -1,4 +1,6 @@
-from app.llm.parse_query import _clamp_to_known
+import pytest
+
+from app.llm.parse_query import _clamp_to_known, _normalize_synonym, _DRIVE_TYPE_SYNONYMS, _TRANSMISSION_SYNONYMS
 
 
 def test_clamp_exact_match_passthrough():
@@ -23,3 +25,28 @@ def test_clamp_none_passthrough():
 
 def test_clamp_with_empty_known_list_passes_through_unchanged():
     assert _clamp_to_known("что угодно", []) == "что угодно"
+
+
+@pytest.mark.parametrize(
+    "user_value",
+    ["АКПП", "акпп", "автоматическая", "автоматическая коробка", "робот", "вариатор", "CVT"],
+)
+def test_transmission_synonyms_normalize_to_avtomat(user_value):
+    assert _normalize_synonym(user_value, _TRANSMISSION_SYNONYMS) == "автомат"
+
+
+@pytest.mark.parametrize("user_value", ["МКПП", "механическая", "ручная"])
+def test_transmission_synonyms_normalize_to_mehanika(user_value):
+    assert _normalize_synonym(user_value, _TRANSMISSION_SYNONYMS) == "механика"
+
+
+def test_full_pipeline_akpp_clamps_to_known_avtomat():
+    # end-to-end: a raw "АКПП" from the model should survive normalization
+    # + clamping and land on the real DB value "автомат".
+    normalized = _normalize_synonym("АКПП", _TRANSMISSION_SYNONYMS)
+    assert _clamp_to_known(normalized, ["автомат", "механика"]) == "автомат"
+
+
+@pytest.mark.parametrize("user_value", ["полный привод", "4x4", "4WD"])
+def test_drive_type_synonyms_normalize_to_4wd(user_value):
+    assert _normalize_synonym(user_value, _DRIVE_TYPE_SYNONYMS) == "4WD"

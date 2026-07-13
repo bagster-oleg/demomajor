@@ -47,6 +47,46 @@ def _build_tool_schema(
     }
 
 
+# Synonyms customers actually type, mapped to the canonical label our
+# transmission_type/drive_type heuristic derives during ETL (see
+# app/etl/feed_parser.py). Applied before clamping, so "АКПП" or
+# "автоматическая коробка" resolve to the same real DB value as "автомат"
+# instead of being dropped as unknown.
+_TRANSMISSION_SYNONYMS = {
+    "акпп": "автомат",
+    "мкпп": "механика",
+    "автоматическая": "автомат",
+    "автоматическая коробка": "автомат",
+    "автоматическую": "автомат",
+    "автомат": "автомат",
+    "робот": "автомат",
+    "роботизированная": "автомат",
+    "вариатор": "автомат",
+    "cvt": "автомат",
+    "механика": "механика",
+    "механическая": "механика",
+    "ручная": "механика",
+    "ручку": "механика",
+}
+
+_DRIVE_TYPE_SYNONYMS = {
+    "полный привод": "4WD",
+    "полный": "4WD",
+    "4x4": "4WD",
+    "4wd": "4WD",
+    "awd": "AWD",
+    "передний привод": "FWD",
+    "передний": "FWD",
+    "fwd": "FWD",
+}
+
+
+def _normalize_synonym(value: str | None, synonyms: dict[str, str]) -> str | None:
+    if value is None:
+        return None
+    return synonyms.get(value.strip().lower(), value)
+
+
 def _clamp_to_known(value: str | None, known_values: list[str]) -> str | None:
     """The Anthropic API does not hard-enforce JSON schema `enum` values -
     it's a strong hint, not a guarantee. Since city/body_type/mark_id/
@@ -89,8 +129,13 @@ def parse_query(
             filt.city = _clamp_to_known(filt.city, known_cities)
             filt.body_type = _clamp_to_known(filt.body_type, known_body_types)
             filt.mark_id = _clamp_to_known(filt.mark_id, known_marks)
-            filt.drive_type = _clamp_to_known(filt.drive_type, known_drive_types)
-            filt.transmission_type = _clamp_to_known(filt.transmission_type, known_transmissions)
+            filt.drive_type = _clamp_to_known(
+                _normalize_synonym(filt.drive_type, _DRIVE_TYPE_SYNONYMS), known_drive_types
+            )
+            filt.transmission_type = _clamp_to_known(
+                _normalize_synonym(filt.transmission_type, _TRANSMISSION_SYNONYMS),
+                known_transmissions,
+            )
             return filt
 
     raise RuntimeError("LLM did not call extract_car_filter")
