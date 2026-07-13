@@ -1,15 +1,18 @@
 from app.api.schemas import CarFilter
 from app.config import settings
 from app.llm.client import get_client
-from app.llm.prompts import PARSE_QUERY_SYSTEM
+from app.llm.prompts import PARSE_QUERY_SYSTEM, REFINE_QUERY_SYSTEM
 
 TOOL_NAME = "extract_car_filter"
 
 
 def _enum_or_string(known_values: list[str]) -> dict:
-    schema = {"type": "string"}
+    schema: dict = {"type": ["string", "null"]}
     if known_values:
-        schema["enum"] = known_values
+        # `enum` constrains the value to exactly these entries - `null` has
+        # to be listed explicitly too, or the type-level "null" option
+        # would be rejected by validators that check enum membership.
+        schema["enum"] = [*known_values, None]
     return schema
 
 
@@ -27,19 +30,19 @@ def _build_tool_schema(
             "type": "object",
             "properties": {
                 "city": _enum_or_string(known_cities),
-                "price_min": {"type": "number"},
-                "price_max": {"type": "number"},
-                "year_min": {"type": "integer"},
-                "year_max": {"type": "integer"},
-                "run_max": {"type": "integer", "description": "максимальный пробег, км"},
+                "price_min": {"type": ["number", "null"]},
+                "price_max": {"type": ["number", "null"]},
+                "year_min": {"type": ["integer", "null"]},
+                "year_max": {"type": ["integer", "null"]},
+                "run_max": {"type": ["integer", "null"], "description": "максимальный пробег, км"},
                 "mark_id": _enum_or_string(known_marks),
                 "body_type": _enum_or_string(known_body_types),
                 "drive_type": _enum_or_string(known_drive_types),
                 "transmission_type": _enum_or_string(known_transmissions),
-                "doors_count": {"type": "integer"},
-                "owners_count_max": {"type": "integer"},
+                "doors_count": {"type": ["integer", "null"]},
+                "owners_count_max": {"type": ["integer", "null"]},
                 "free_text_intent": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "description": "нечёткая часть запроса, не сводимая к остальным полям",
                 },
             },
@@ -102,6 +105,40 @@ def _clamp_to_known(value: str | None, known_values: list[str]) -> str | None:
     return None
 
 
+def _sanitize_partial_update(raw: dict) -> dict:
+    """Even with a nullable JSON schema, a model can still emit the literal
+    string "null" instead of real JSON null when asked to clear a field
+    (this happened in practice) - `model_copy`/`model_validate` don't
+    coerce that, so a stray "null" string would otherwise flow straight
+    into a SQL parameter bound against a numeric column. Normalize it here
+    before it goes anywhere near the filter."""
+    return {
+        key: (None if isinstance(value, str) and value.strip().lower() == "null" else value)
+        for key, value in raw.items()
+    }
+
+
+def _apply_clamping(
+    filt: CarFilter,
+    known_cities: list[str],
+    known_body_types: list[str],
+    known_marks: list[str],
+    known_drive_types: list[str],
+    known_transmissions: list[str],
+) -> CarFilter:
+    filt.city = _clamp_to_known(filt.city, known_cities)
+    filt.body_type = _clamp_to_known(filt.body_type, known_body_types)
+    filt.mark_id = _clamp_to_known(filt.mark_id, known_marks)
+    filt.drive_type = _clamp_to_known(
+        _normalize_synonym(filt.drive_type, _DRIVE_TYPE_SYNONYMS), known_drive_types
+    )
+    filt.transmission_type = _clamp_to_known(
+        _normalize_synonym(filt.transmission_type, _TRANSMISSION_SYNONYMS),
+        known_transmissions,
+    )
+    return filt
+
+
 def parse_query(
     query: str,
     known_cities: list[str],
@@ -125,17 +162,63 @@ def parse_query(
 
     for block in response.content:
         if block.type == "tool_use" and block.name == TOOL_NAME:
-            filt = CarFilter(**block.input)
-            filt.city = _clamp_to_known(filt.city, known_cities)
-            filt.body_type = _clamp_to_known(filt.body_type, known_body_types)
-            filt.mark_id = _clamp_to_known(filt.mark_id, known_marks)
-            filt.drive_type = _clamp_to_known(
-                _normalize_synonym(filt.drive_type, _DRIVE_TYPE_SYNONYMS), known_drive_types
+            filt = CarFilter(**_sanitize_partial_update(block.input))
+            return _apply_clamping(
+                filt, known_cities, known_body_types, known_marks, known_drive_types, known_transmissions
             )
-            filt.transmission_type = _clamp_to_known(
-                _normalize_synonym(filt.transmission_type, _TRANSMISSION_SYNONYMS),
+
+    raise RuntimeError("LLM did not call extract_car_filter")
+
+
+def refine_query(
+    base_filter: CarFilter,
+    refinement_text: str,
+    known_cities: list[str],
+    known_body_types: list[str],
+    known_marks: list[str],
+    known_drive_types: list[str],
+    known_transmissions: list[str],
+) -> CarFilter:
+    """Update `base_filter` with a follow-up refinement ("а подешевле?",
+    "только с автоматом") instead of re-parsing from scratch - the model is
+    told to include only the fields the refinement actually changes, and
+    those get merged onto the existing filter (untouched fields keep their
+    prior value; a field explicitly set to null clears that constraint).
+    """
+    tool = _build_tool_schema(
+        known_cities, known_body_types, known_marks, known_drive_types, known_transmissions
+    )
+
+    user_content = (
+        f"Текущий фильтр (JSON):\n{base_filter.model_dump_json()}\n\n"
+        f"Уточнение клиента: {refinement_text}"
+    )
+
+    response = get_client().messages.create(
+        model=settings.anthropic_model,
+        max_tokens=1024,
+        system=REFINE_QUERY_SYSTEM,
+        tools=[tool],
+        tool_choice={"type": "tool", "name": TOOL_NAME},
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == TOOL_NAME:
+            # Validated reconstruction rather than model_copy(update=...):
+            # model_copy skips validation/coercion entirely, so any type
+            # slip from the model (a stray "null" string once caused a SQL
+            # error - see _sanitize_partial_update) would otherwise flow
+            # straight through to the database query.
+            merged_data = {**base_filter.model_dump(), **_sanitize_partial_update(block.input)}
+            merged = CarFilter.model_validate(merged_data)
+            return _apply_clamping(
+                merged,
+                known_cities,
+                known_body_types,
+                known_marks,
+                known_drive_types,
                 known_transmissions,
             )
-            return filt
 
     raise RuntimeError("LLM did not call extract_car_filter")

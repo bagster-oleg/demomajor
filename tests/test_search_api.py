@@ -123,4 +123,4 @@ def test_search_with_relaxed_filter_reports_exact_match_false(seeded_cars):
     # rank_and_explain must be told what was relaxed so it can be honest
     # about the mismatch instead of pretending it's a perfect match.
     mock_rank.assert_called_once()
-    assert mock_rank.call_args[0][3] == ["количество дверей"]
+    assert mock_rank.call_args[0][2] == ["количество дверей"]

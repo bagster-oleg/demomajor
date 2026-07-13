@@ -59,7 +59,14 @@ function PhotoGallery({ images, alt }: { images: string[]; alt: string }) {
   );
 }
 
-export function CarCard({ car }: { car: CarResult }) {
+interface CarCardProps {
+  car: CarResult;
+  compareChecked?: boolean;
+  onToggleCompare?: () => void;
+  compareDisabled?: boolean;
+}
+
+export function CarCard({ car, compareChecked, onToggleCompare, compareDisabled }: CarCardProps) {
   const [showAllExtras, setShowAllExtras] = useState(false);
   const { discounts } = car;
   const hasDiscount = discounts.max_discount > 0;
@@ -91,6 +98,18 @@ export function CarCard({ car }: { car: CarResult }) {
       <PhotoGallery images={car.images} alt={title} />
 
       <div className="car-card__body">
+        {onToggleCompare && (
+          <label className="car-card__compare">
+            <input
+              type="checkbox"
+              checked={compareChecked ?? false}
+              disabled={compareDisabled && !compareChecked}
+              onChange={onToggleCompare}
+            />
+            Сравнить
+          </label>
+        )}
+
         <h3 className="car-card__title">{title}</h3>
         {subtitle && <div className="car-card__subtitle">{subtitle}</div>}
 

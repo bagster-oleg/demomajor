@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class CarFilter(BaseModel):
@@ -31,7 +31,10 @@ class CarFilter(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     city: Optional[str] = None
-    limit: int = Field(default=3, ge=1, le=10)
+    # When present, `query` is treated as a follow-up refinement of this
+    # filter (from a previous response's parsed_filter) rather than a
+    # fresh, from-scratch request - see app.llm.parse_query.refine_query.
+    previous_filter: Optional[CarFilter] = None
 
 
 class Discounts(BaseModel):

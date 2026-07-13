@@ -471,3 +471,234 @@ body {
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
+
+.car-card__compare {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: -2px;
+}
+
+.car-card__compare input {
+  cursor: pointer;
+}
+
+/* ---------- conversation trail / refine bar ---------- */
+
+.conversation-trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.conversation-trail__item:first-child {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.results-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.results-toolbar__count {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.results-toolbar__compare-button {
+  border: none;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.results-toolbar__compare-button:hover {
+  background: #27272a;
+}
+
+.refine-bar {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.refine-bar__input {
+  flex: 1 1 0;
+  min-width: 200px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.refine-bar__input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.refine-bar__button {
+  border: 1px solid var(--text-h);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.refine-bar__button:hover:not(:disabled) {
+  background: var(--text-h);
+  color: #fff;
+}
+
+.refine-bar__button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 480px) {
+  .refine-bar {
+    flex-direction: column;
+  }
+
+  .refine-bar__input,
+  .refine-bar__button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ---------- comparison overlay ---------- */
+
+.comparison-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 12, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.comparison-panel {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  max-width: 960px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.comparison-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.comparison-panel__header h2 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--text-h);
+}
+
+.comparison-panel__close {
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+}
+
+.comparison-panel__close:hover {
+  color: var(--text-h);
+}
+
+.comparison-scroll {
+  overflow: auto;
+  padding: 0 22px 22px;
+}
+
+.comparison-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.comparison-table th,
+.comparison-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.comparison-table thead th {
+  vertical-align: top;
+  min-width: 160px;
+}
+
+.comparison-table tbody th {
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.comparison-table__photo {
+  width: 160px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.comparison-table__photo--empty {
+  background: var(--border);
+}
+
+.comparison-table__title {
+  font-weight: 700;
+  color: var(--text-h);
+  font-size: 14px;
+  white-space: normal;
+}
+
+.comparison-table__link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.comparison-table__best {
+  color: var(--accent-dark);
+  font-weight: 700;
+  background: #eef4ff;
+}

@@ -1,4 +1,4 @@
-import type { SearchResponse, StatsResponse } from './types';
+import type { CarFilter, SearchResponse, StatsResponse } from './types';
 
 // Empty by default: in production the SPA and API share the same origin
 // (nginx proxies /api/ to the backend on major.aifield.ru). Set
@@ -25,12 +25,16 @@ export async function fetchStats(city: string | null): Promise<StatsResponse> {
 export async function searchCars(
   query: string,
   city: string | null,
-  limit = 3,
+  previousFilter?: CarFilter | null,
 ): Promise<SearchResponse> {
   const res = await fetch(`${API_BASE}/api/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, city: city || undefined, limit }),
+    body: JSON.stringify({
+      query,
+      city: city || undefined,
+      previous_filter: previousFilter ?? undefined,
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');

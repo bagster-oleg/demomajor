@@ -9,9 +9,14 @@ from app.api.filter_sql import (
     fetch_distinct_transmissions,
 )
 from app.api.schemas import CarResult, Discounts, SearchRequest, SearchResponse
-from app.llm.parse_query import parse_query
+from app.llm.parse_query import parse_query, refine_query
 from app.llm.rank_explain import rank_and_explain
 from app.vector.rerank import rerank_by_free_text_intent
+
+# Safety valve for the rank/explain LLM call - not a business "top N", just
+# a bound on how many cars get sent through one prompt. Every candidate up
+# to this count gets explained; none are chosen/dropped as "not good enough".
+MAX_EXPLAINED_CANDIDATES = 15
 
 
 def _build_car_result(row: dict, explanation: str) -> CarResult:
@@ -63,14 +68,27 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     known_drive_types = fetch_distinct_drive_types(conn)
     known_transmissions = fetch_distinct_transmissions(conn)
 
-    filt = parse_query(
-        request.query,
-        known_cities=known_cities,
-        known_body_types=known_body_types,
-        known_marks=known_marks,
-        known_drive_types=known_drive_types,
-        known_transmissions=known_transmissions,
-    )
+    if request.previous_filter is not None:
+        # Follow-up refinement ("а подешевле?") - update the existing
+        # filter instead of re-parsing the whole conversation from scratch.
+        filt = refine_query(
+            request.previous_filter,
+            request.query,
+            known_cities=known_cities,
+            known_body_types=known_body_types,
+            known_marks=known_marks,
+            known_drive_types=known_drive_types,
+            known_transmissions=known_transmissions,
+        )
+    else:
+        filt = parse_query(
+            request.query,
+            known_cities=known_cities,
+            known_body_types=known_body_types,
+            known_marks=known_marks,
+            known_drive_types=known_drive_types,
+            known_transmissions=known_transmissions,
+        )
 
     # An explicit city selector on the UI always wins over whatever the LLM
     # parsed out of the free-text query.
@@ -98,7 +116,9 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     # instead of it, and never dropping a candidate.
     candidates = rerank_by_free_text_intent(filt.free_text_intent, candidates)
 
-    ranked = rank_and_explain(request.query, candidates, request.limit, relaxed_fields)
+    ranked = rank_and_explain(
+        request.query, candidates[:MAX_EXPLAINED_CANDIDATES], relaxed_fields
+    )
 
     candidates_by_id = {c["unique_id"]: c for c in candidates}
     results = []

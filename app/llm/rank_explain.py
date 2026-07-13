@@ -66,12 +66,16 @@ def _tool_schema() -> dict:
 
 
 def rank_and_explain(
-    query: str, candidates: list[dict], limit: int, relaxed_fields: list[str] | None = None
+    query: str, candidates: list[dict], relaxed_fields: list[str] | None = None
 ) -> list[dict]:
-    """Ask the LLM to pick and explain up to `limit` candidates.
+    """Ask the LLM to order and explain every candidate - selection already
+    happened deterministically in SQL (see fetch_candidates_with_relaxation),
+    so this never drops a car the filter approved, whether there's 1 of
+    them or 10.
 
     Returns a list of {"unique_id", "explanation"} dicts in the order the
-    LLM ranked them. Caller is responsible for joining back to full DB rows.
+    LLM ranked them, one entry per candidate. Caller is responsible for
+    joining back to full DB rows.
 
     `relaxed_fields`, when non-empty, means the SQL step found nothing for
     the exact filter and had to loosen these constraints to find anything -
@@ -82,6 +86,7 @@ def rank_and_explain(
         return []
 
     compact = [_compact_candidate(row) for row in candidates]
+    known_ids = {c["unique_id"] for c in compact}
 
     mismatch_note = ""
     if relaxed_fields:
@@ -96,8 +101,8 @@ def rank_and_explain(
 
     response = get_client().messages.create(
         model=settings.anthropic_model,
-        max_tokens=2048,
-        system=RANK_EXPLAIN_SYSTEM.format(limit=limit),
+        max_tokens=4096,
+        system=RANK_EXPLAIN_SYSTEM,
         tools=[_tool_schema()],
         tool_choice={"type": "tool", "name": TOOL_NAME},
         messages=[
@@ -105,7 +110,8 @@ def rank_and_explain(
                 "role": "user",
                 "content": (
                     f"Запрос клиента: {query}\n\n"
-                    f"Кандидаты (JSON):\n{json.dumps(compact, ensure_ascii=False)}"
+                    f"Кандидаты (JSON), все {len(compact)} шт.:\n"
+                    f"{json.dumps(compact, ensure_ascii=False)}"
                     f"{mismatch_note}"
                 ),
             }
@@ -114,8 +120,17 @@ def rank_and_explain(
 
     for block in response.content:
         if block.type == "tool_use" and block.name == TOOL_NAME:
-            results = block.input.get("results", [])
-            known_ids = {c["unique_id"] for c in compact}
-            return [r for r in results if r.get("unique_id") in known_ids][:limit]
+            results = [r for r in block.input.get("results", []) if r.get("unique_id") in known_ids]
+            # The SQL step already decided every one of these candidates
+            # qualifies - if the model dropped one (or all) by mistake,
+            # append it at the end with a neutral explanation rather than
+            # silently losing a car the filter approved.
+            seen_ids = {r["unique_id"] for r in results}
+            for candidate_id in known_ids - seen_ids:
+                results.append({
+                    "unique_id": candidate_id,
+                    "explanation": "Подходит по заданным критериям поиска.",
+                })
+            return results
 
     raise RuntimeError("LLM did not call select_and_explain")
