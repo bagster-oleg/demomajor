@@ -1,0 +1,102 @@
+import json
+from decimal import Decimal
+
+from app.config import settings
+from app.llm.client import get_client
+from app.llm.prompts import RANK_EXPLAIN_SYSTEM
+
+TOOL_NAME = "select_and_explain"
+
+_CANDIDATE_FIELDS = [
+    "unique_id",
+    "mark_id",
+    "folder_id",
+    "modification_id",
+    "complectation_name",
+    "body_type",
+    "drive_type",
+    "transmission_type",
+    "year",
+    "run",
+    "owners_number",
+    "state",
+    "price",
+    "currency",
+    "max_discount",
+    "tradein_discount",
+    "credit_discount",
+    "insurance_discount",
+    "city",
+    "poi_id",
+]
+
+
+def _json_safe(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+def _compact_candidate(row: dict) -> dict:
+    return {field: _json_safe(row.get(field)) for field in _CANDIDATE_FIELDS}
+
+
+def _tool_schema() -> dict:
+    return {
+        "name": TOOL_NAME,
+        "description": "Выбрать и объяснить подходящие автомобили из списка кандидатов.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "unique_id": {"type": "string"},
+                            "explanation": {"type": "string"},
+                        },
+                        "required": ["unique_id", "explanation"],
+                    },
+                }
+            },
+            "required": ["results"],
+        },
+    }
+
+
+def rank_and_explain(query: str, candidates: list[dict], limit: int) -> list[dict]:
+    """Ask the LLM to pick and explain up to `limit` candidates.
+
+    Returns a list of {"unique_id", "explanation"} dicts in the order the
+    LLM ranked them. Caller is responsible for joining back to full DB rows.
+    """
+    if not candidates:
+        return []
+
+    compact = [_compact_candidate(row) for row in candidates]
+
+    response = get_client().messages.create(
+        model=settings.anthropic_model,
+        max_tokens=2048,
+        system=RANK_EXPLAIN_SYSTEM.format(limit=limit),
+        tools=[_tool_schema()],
+        tool_choice={"type": "tool", "name": TOOL_NAME},
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Запрос клиента: {query}\n\n"
+                    f"Кандидаты (JSON):\n{json.dumps(compact, ensure_ascii=False)}"
+                ),
+            }
+        ],
+    )
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == TOOL_NAME:
+            results = block.input.get("results", [])
+            known_ids = {c["unique_id"] for c in compact}
+            return [r for r in results if r.get("unique_id") in known_ids][:limit]
+
+    raise RuntimeError("LLM did not call select_and_explain")

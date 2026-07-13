@@ -51,6 +51,7 @@ cars = Table(
     # Not a real feed field - best-effort guess derived from modification_id
     # (looks for a "4WD"/"AWD" marker). See app/etl/feed_parser.py::_drive_type.
     Column("drive_type", Text),
+    Column("transmission_type", Text),
     Column("description", Text),
     Column("extras", Text),
     Column("images", ARRAY(Text)),

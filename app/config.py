@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://majorauto:majorauto@localhost:5432/majorauto"
     anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
 
     # city -> path/URL of its feed XML. Local file paths for now; swap a
     # value for an https:// URL once real feed endpoints are known.

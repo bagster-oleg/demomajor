@@ -62,6 +62,19 @@ def test_drive_type_derived_from_modification_id():
     assert baic.drive_type is None
 
 
+def test_transmission_type_derived_from_modification_id():
+    records = parse_feed_file(FIXTURE, city="Москва")
+    audi = next(r for r in records if r.unique_id == "1937189")
+    assert audi.transmission_type == "автомат"  # AMT, grouped with classic automatics
+
+    baic = next(r for r in records if r.unique_id == "1945461")
+    assert baic.transmission_type == "автомат"  # CVT
+
+    kia_rio = next(r for r in records if r.unique_id == "1864081")
+    assert kia_rio.modification_id == "X-Line 1.4 AT (100 л.с.)"
+    assert kia_rio.transmission_type == "автомат"  # AT
+
+
 def test_contact_info_flattened():
     records = parse_feed_file(FIXTURE, city="Москва")
     audi = next(r for r in records if r.unique_id == "1937189")

@@ -63,6 +63,7 @@ class CarRecord(BaseModel):
     insurance_discount: Optional[float] = None
     doors_count: Optional[int] = None
     drive_type: Optional[str] = None
+    transmission_type: Optional[str] = None
     description: Optional[str] = None
     extras: Optional[str] = None
     images: list[str] = []
@@ -149,6 +150,32 @@ def _drive_type(modification_id: Optional[str]) -> Optional[str]:
     return None
 
 
+_TRANSMISSION_TOKEN_RE = re.compile(r"\b(AMT|CVT|DSG|AT|MT)\b", re.IGNORECASE)
+_TRANSMISSION_TO_LABEL = {
+    "AT": "автомат",
+    "CVT": "автомат",
+    # AMT/DSG are technically robotized/dual-clutch gearboxes, not a classic
+    # torque-converter automatic, but buyers colloquially call anything
+    # without a clutch pedal "автомат" - grouping them keeps search results
+    # matching how people actually phrase queries ("нужен автомат").
+    "AMT": "автомат",
+    "DSG": "автомат",
+    "MT": "механика",
+}
+
+
+def _transmission_type(modification_id: Optional[str]) -> Optional[str]:
+    """Best-effort transmission guess: also not a dedicated field, derived
+    from the gearbox token embedded in modification_id (e.g. "... AMT ...",
+    "... CVT ...")."""
+    if not modification_id:
+        return None
+    match = _TRANSMISSION_TOKEN_RE.search(modification_id)
+    if not match:
+        return None
+    return _TRANSMISSION_TO_LABEL[match.group(1).upper()]
+
+
 def _contact(node: etree._Element) -> tuple[Optional[str], Optional[str], Optional[str]]:
     contact_info = node.find("contact_info")
     if contact_info is None:
@@ -211,6 +238,7 @@ def parse_car_node(node: etree._Element, city: str, feed_source: str) -> CarReco
         insurance_discount=_float(node, "insurance_discount"),
         doors_count=_int(node, "doors_count"),
         drive_type=_drive_type(modification_id),
+        transmission_type=_transmission_type(modification_id),
         description=_text(node, "description"),
         extras=_text(node, "extras"),
         images=_images(node),

@@ -41,6 +41,7 @@ _UPDATE_COLUMNS = [
     "insurance_discount",
     "doors_count",
     "drive_type",
+    "transmission_type",
     "description",
     "extras",
     "images",
