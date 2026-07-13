@@ -3,6 +3,10 @@ __pycache__/
 .pytest_cache/
 .env
 .env.*
+# frontend/.env.development and .env.production hold no secrets (just the
+# API base URL) and are needed for a correct build - keep them tracked.
+!frontend/.env.development
+!frontend/.env.production
 deploy/SERVER_ACCESS.md
 node_modules/
 dist/
