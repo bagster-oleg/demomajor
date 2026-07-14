@@ -17,7 +17,7 @@ const MAX_COMPARE = 4;
 export default function App() {
   const [cities, setCities] = useState<string[]>([]);
   const [city, setCity] = useState('');
-  const [totalModels, setTotalModels] = useState<number | null>(null);
+  const [totalCars, setTotalCars] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +36,8 @@ export default function App() {
 
   useEffect(() => {
     fetchStats(city || null)
-      .then((stats) => setTotalModels(stats.total_models))
-      .catch(() => setTotalModels(null));
+      .then((stats) => setTotalCars(stats.total_cars))
+      .catch(() => setTotalCars(null));
   }, [city]);
 
   async function runSearch(text: string) {
@@ -144,7 +144,7 @@ export default function App() {
         </h1>
 
         <p className="hero__subtitle">
-          Живой каталог: {totalModels != null ? <strong>{totalModels}</strong> : '…'} моделей в
+          Живой каталог: {totalCars != null ? <strong>{totalCars}</strong> : '…'} автомобилей в
           наличии. Укажите бюджет, задачи, семью — или сразу конкретную марку и модель, если
           знаете, что ищете. Отфильтруем точно по цифрам из наличия.
         </p>
