@@ -18,10 +18,19 @@ class CarFilter(BaseModel):
     run_max: Optional[int] = None
     mark_id: Optional[str] = None
     body_type: Optional[str] = None
+    color: Optional[str] = None
     drive_type: Optional[str] = None
     transmission_type: Optional[str] = None
     doors_count: Optional[int] = None
     owners_count_max: Optional[int] = None
+    # Explicit numeric ranges the client can state directly ("двигатель не
+    # менее 1.6 л", "от 200 л.с.", "минимум 7 мест"). Filtered on the real
+    # engine_volume_l / power_hp / seats columns parsed during ETL.
+    engine_volume_min: Optional[float] = None
+    engine_volume_max: Optional[float] = None
+    power_hp_min: Optional[int] = None
+    power_hp_max: Optional[int] = None
+    seats_min: Optional[int] = None
     # Semantic preferences that map to a deterministic filter over real
     # parsed numbers, not to a made-up field: "семейный" -> seats >= 5,
     # "экономичный" -> small engine (engine_volume_l <= threshold). See

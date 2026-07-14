@@ -4,6 +4,7 @@ from app.api.filter_sql import (
     fetch_candidates_with_relaxation,
     fetch_distinct_body_types,
     fetch_distinct_cities,
+    fetch_distinct_colors,
     fetch_distinct_drive_types,
     fetch_distinct_marks,
     fetch_distinct_transmissions,
@@ -70,6 +71,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     known_marks = fetch_distinct_marks(conn)
     known_drive_types = fetch_distinct_drive_types(conn)
     known_transmissions = fetch_distinct_transmissions(conn)
+    known_colors = fetch_distinct_colors(conn)
 
     if request.previous_filter is not None:
         # Follow-up refinement ("а подешевле?") - update the existing
@@ -82,6 +84,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
             known_marks=known_marks,
             known_drive_types=known_drive_types,
             known_transmissions=known_transmissions,
+            known_colors=known_colors,
         )
     else:
         filt, dropped_fields = parse_query(
@@ -91,6 +94,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
             known_marks=known_marks,
             known_drive_types=known_drive_types,
             known_transmissions=known_transmissions,
+            known_colors=known_colors,
         )
 
     # An explicit city selector on the UI always wins over whatever the LLM

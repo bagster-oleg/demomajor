@@ -109,3 +109,35 @@ def test_family_and_economical_compose(conn):
     filt = CarFilter(family_friendly=True, economical=True)
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert all(c["seats"] >= 5 and float(c["engine_volume_l"]) <= 1.6 for c in candidates)
+
+
+def test_color_and_engine_volume_min_compose(conn):
+    # Regression: "авто белого цвета с двигателем не менее 1.6 литра" used
+    # to return all 9 cars (any color, any engine) because CarFilter had no
+    # field for either color or an explicit engine range - both got lost
+    # in free_text_intent, which only reranks, never filters.
+    _seed(conn)
+    filt = CarFilter(color="Белый", engine_volume_min=1.6)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 2  # the two white Nissan Qashqai, both 2.0L
+    assert all(c["color"] == "Белый" for c in candidates)
+    assert all(float(c["engine_volume_l"]) >= 1.6 for c in candidates)
+
+
+def test_color_excludes_other_colors(conn):
+    _seed(conn)
+    filt = CarFilter(color="Синий")
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 2  # Porsche Macan + Kia Rio, both "Синий"
+    assert all(c["color"] == "Синий" for c in candidates)
+
+
+def test_engine_volume_max_excludes_bigger_engines(conn):
+    _seed(conn)
+    filt = CarFilter(engine_volume_max=1.5)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert all(float(c["engine_volume_l"]) <= 1.5 for c in candidates)
+    assert "1937189" not in {c["unique_id"] for c in candidates}  # Audi, 3.0L

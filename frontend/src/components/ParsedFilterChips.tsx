@@ -27,10 +27,29 @@ function filterToChips(f: CarFilter): string[] {
 
   if (f.mark_id) chips.push(f.mark_id);
   if (f.body_type) chips.push(f.body_type.toLowerCase());
+  if (f.color) chips.push(f.color.toLowerCase());
   if (f.family_friendly) chips.push('семейный (5+ мест)');
   if (f.drive_type) chips.push(DRIVE_LABELS[f.drive_type] ?? f.drive_type);
   if (f.transmission_type) chips.push(f.transmission_type);
   if (f.economical) chips.push('экономичный (двигатель ≤ 1.6 л)');
+
+  if (f.engine_volume_min != null && f.engine_volume_max != null) {
+    chips.push(`двигатель ${f.engine_volume_min}–${f.engine_volume_max} л`);
+  } else if (f.engine_volume_min != null) {
+    chips.push(`двигатель от ${f.engine_volume_min} л`);
+  } else if (f.engine_volume_max != null) {
+    chips.push(`двигатель до ${f.engine_volume_max} л`);
+  }
+
+  if (f.power_hp_min != null && f.power_hp_max != null) {
+    chips.push(`${f.power_hp_min}–${f.power_hp_max} л.с.`);
+  } else if (f.power_hp_min != null) {
+    chips.push(`от ${f.power_hp_min} л.с.`);
+  } else if (f.power_hp_max != null) {
+    chips.push(`до ${f.power_hp_max} л.с.`);
+  }
+
+  if (f.seats_min != null) chips.push(`от ${f.seats_min} мест`);
 
   if (f.price_min != null && f.price_max != null) {
     chips.push(`${formatMoney(f.price_min)} – ${formatMoney(f.price_max)}`);

@@ -50,10 +50,16 @@ export interface CarFilter {
   run_max: number | null;
   mark_id: string | null;
   body_type: string | null;
+  color: string | null;
   drive_type: string | null;
   transmission_type: string | null;
   doors_count: number | null;
   owners_count_max: number | null;
+  engine_volume_min: number | null;
+  engine_volume_max: number | null;
+  power_hp_min: number | null;
+  power_hp_max: number | null;
+  seats_min: number | null;
   family_friendly: boolean | null;
   economical: boolean | null;
   free_text_intent: string | null;

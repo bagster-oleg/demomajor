@@ -29,6 +29,8 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(func.lower(cars.c.mark_id) == filt.mark_id.lower())
     if filt.body_type:
         conditions.append(cars.c.body_type.ilike(f"%{filt.body_type}%"))
+    if filt.color:
+        conditions.append(func.lower(cars.c.color) == filt.color.lower())
     if filt.drive_type:
         conditions.append(cars.c.drive_type == filt.drive_type)
     if filt.transmission_type:
@@ -47,6 +49,16 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(cars.c.doors_count == filt.doors_count)
     if filt.owners_count_max is not None:
         conditions.append(cars.c.owners_count <= filt.owners_count_max)
+    if filt.engine_volume_min is not None:
+        conditions.append(cars.c.engine_volume_l >= filt.engine_volume_min)
+    if filt.engine_volume_max is not None:
+        conditions.append(cars.c.engine_volume_l <= filt.engine_volume_max)
+    if filt.power_hp_min is not None:
+        conditions.append(cars.c.power_hp >= filt.power_hp_min)
+    if filt.power_hp_max is not None:
+        conditions.append(cars.c.power_hp <= filt.power_hp_max)
+    if filt.seats_min is not None:
+        conditions.append(cars.c.seats >= filt.seats_min)
     if filt.economical:
         # A real number (engine displacement) is the honest best proxy the
         # feed supports - it has no fuel-consumption figures at all.
@@ -79,10 +91,16 @@ def fetch_candidates(conn: Connection, filt: CarFilter, limit: int = DEFAULT_CAN
 _RELAX_FIELD_ORDER = [
     "doors_count",
     "owners_count_max",
+    "color",
+    "power_hp_min",
+    "power_hp_max",
+    "engine_volume_min",
+    "engine_volume_max",
     "economical",
     "drive_type",
     "transmission_type",
     "run_max",
+    "seats_min",
     "family_friendly",
     "body_type",
     "year_min",
@@ -92,10 +110,16 @@ _RELAX_FIELD_ORDER = [
 _RELAX_FIELD_LABELS = {
     "doors_count": "количество дверей",
     "owners_count_max": "число владельцев",
+    "color": "цвет",
+    "power_hp_min": "мощность двигателя",
+    "power_hp_max": "мощность двигателя",
+    "engine_volume_min": "объём двигателя",
+    "engine_volume_max": "объём двигателя",
     "economical": "экономичность",
     "drive_type": "привод",
     "transmission_type": "коробка передач",
     "run_max": "пробег",
+    "seats_min": "количество мест",
     "family_friendly": "вместимость (семейный)",
     "body_type": "тип кузова",
     "year_min": "год выпуска",
@@ -183,6 +207,16 @@ def fetch_distinct_body_types(conn: Connection) -> list[str]:
         .where(and_(cars.c.is_active.is_(True), cars.c.body_type.is_not(None)))
         .distinct()
         .order_by(cars.c.body_type)
+    )
+    return [row[0] for row in conn.execute(stmt).all()]
+
+
+def fetch_distinct_colors(conn: Connection) -> list[str]:
+    stmt = (
+        select(cars.c.color)
+        .where(and_(cars.c.is_active.is_(True), cars.c.color.is_not(None)))
+        .distinct()
+        .order_by(cars.c.color)
     )
     return [row[0] for row in conn.execute(stmt).all()]
 

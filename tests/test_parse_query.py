@@ -37,6 +37,13 @@ def test_clamp_with_empty_known_list_passes_through_unchanged():
     assert _clamp_to_known("что угодно", []) == "что угодно"
 
 
+def test_clamp_folds_yo_and_ye_for_color():
+    # Feed colors don't use "ё" ("Черный"), but a user or the model might
+    # type "чёрный" - must still match, not get dropped as unknown.
+    assert _clamp_to_known("чёрный", ["Черный", "Белый"]) == "Черный"
+    assert _clamp_to_known("Чёрный", ["Черный", "Белый"]) == "Черный"
+
+
 @pytest.mark.parametrize(
     "user_value",
     ["АКПП", "акпп", "автоматическая", "автоматическая коробка", "робот", "вариатор", "CVT"],
@@ -86,6 +93,7 @@ def test_refine_query_merges_only_the_changed_field():
             known_marks=["Kia"],
             known_drive_types=[],
             known_transmissions=[],
+            known_colors=[],
         )
 
     assert updated.price_max == 700_000
@@ -110,6 +118,7 @@ def test_refine_query_explicit_null_clears_a_constraint():
             known_marks=[],
             known_drive_types=[],
             known_transmissions=[],
+            known_colors=[],
         )
 
     assert updated.price_max is None
@@ -136,6 +145,7 @@ def test_refine_query_string_literal_null_is_treated_as_real_none():
             known_marks=[],
             known_drive_types=[],
             known_transmissions=[],
+            known_colors=[],
         )
 
     assert updated.price_max is None
@@ -159,6 +169,7 @@ def test_refine_query_clamps_new_value_against_known_list():
             known_marks=[],
             known_drive_types=[],
             known_transmissions=["автомат", "механика"],
+            known_colors=[],
         )
 
     # Clamped to None rather than silently filtering on a value that can
@@ -186,6 +197,7 @@ def test_parse_query_reports_dropped_field_when_brand_not_in_stock():
             known_marks=["Kia", "Hyundai"],
             known_drive_types=[],
             known_transmissions=[],
+            known_colors=[],
         )
 
     assert filt.mark_id is None

@@ -14,6 +14,7 @@ _CANDIDATE_FIELDS = [
     "modification_id",
     "complectation_name",
     "body_type",
+    "color",
     "drive_type",
     "transmission_type",
     "engine_volume_l",
