@@ -32,6 +32,7 @@ function filterToChips(f: CarFilter): string[] {
   if (f.drive_type) chips.push(DRIVE_LABELS[f.drive_type] ?? f.drive_type);
   if (f.transmission_type) chips.push(f.transmission_type);
   if (f.economical) chips.push('экономичный (двигатель ≤ 1.6 л)');
+  if (f.prefer_cheap) chips.push('бюджетный (не дороже медианной цены в наличии)');
 
   if (f.engine_volume_min != null && f.engine_volume_max != null) {
     chips.push(`двигатель ${f.engine_volume_min}–${f.engine_volume_max} л`);

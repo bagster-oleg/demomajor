@@ -37,6 +37,12 @@ class CarFilter(BaseModel):
     # app/api/filter_sql.py for the exact thresholds.
     family_friendly: Optional[bool] = None
     economical: Optional[bool] = None
+    # "недорогая", "бюджетная", "подешевле" WITHOUT a stated number - unlike
+    # price_max (an explicit number from the client), this doesn't invent a
+    # cutoff: filter_sql computes it as the real median price of currently
+    # matching stock, so it tracks whatever inventory actually has instead
+    # of going stale like a hardcoded threshold would.
+    prefer_cheap: Optional[bool] = None
     # Leftover fuzzy part of the query that doesn't map to a structured
     # field (e.g. "для дачи с прицепом") - reserved for the optional
     # phase-5 pgvector rerank over description/extras, unused for now.

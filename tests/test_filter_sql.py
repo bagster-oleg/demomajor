@@ -141,3 +141,38 @@ def test_engine_volume_max_excludes_bigger_engines(conn):
     assert exact_match is True
     assert all(float(c["engine_volume_l"]) <= 1.5 for c in candidates)
     assert "1937189" not in {c["unique_id"] for c in candidates}  # Audi, 3.0L
+
+
+def test_prefer_cheap_excludes_the_expensive_half_of_stock(conn):
+    _seed(conn)
+    # Regression: "недорогая первая машина для сына" with no stated number
+    # used to return all 9 cars, Porsche Macan (3.77M) and Audi A7 (5.1M)
+    # included, because there was no field for "cheap without a number" to
+    # land on at all. prefer_cheap must cap it at the real median price of
+    # current stock instead.
+    filt = CarFilter(prefer_cheap=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    prices = {float(c["price"]) for c in candidates}
+    assert 5_100_000.0 not in prices  # Audi A7
+    assert 3_770_000.0 not in prices  # Porsche Macan
+    assert 650_000.0 in prices  # Kia Rio - the actual cheapest car in stock
+
+
+def test_prefer_cheap_orders_cheapest_first(conn):
+    _seed(conn)
+    filt = CarFilter(prefer_cheap=True)
+    candidates, _exact_match, _relaxed = fetch_candidates_with_relaxation(conn, filt)
+    prices = [float(c["price"]) for c in candidates]
+    assert prices == sorted(prices)
+
+
+def test_prefer_cheap_ignored_when_explicit_price_max_given(conn):
+    _seed(conn)
+    # An explicit number always wins - prefer_cheap only kicks in when the
+    # client didn't state a number at all.
+    filt = CarFilter(prefer_cheap=True, price_max=5_000_000)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    prices = {float(c["price"]) for c in candidates}
+    assert 3_770_000.0 in prices  # Porsche Macan - under the explicit 5M cap

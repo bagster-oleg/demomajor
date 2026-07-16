@@ -65,12 +65,27 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(cars.c.engine_volume_l <= ECONOMICAL_MAX_ENGINE_L)
     if filt.family_friendly:
         conditions.append(cars.c.seats >= FAMILY_MIN_SEATS)
+    if filt.prefer_cheap and filt.price_max is None:
+        # "недорогая"/"бюджетная" with no stated number - rather than invent
+        # a cutoff, cap it at the real median price of currently matching
+        # stock (computed from the conditions gathered so far), so it's
+        # always grounded in what's actually in inventory right now instead
+        # of a fixed number that goes stale as prices/stock change.
+        median_price = (
+            select(func.percentile_cont(0.5).within_group(cars.c.price.asc()))
+            .where(and_(*conditions))
+            .scalar_subquery()
+        )
+        conditions.append(cars.c.price <= median_price)
 
     # Heuristic ordering: within budget, a higher price usually means a
     # better-equipped trim, so surface those first; break ties by discount
-    # size and recency of model year.
+    # size and recency of model year. "недорогая" without a stated budget
+    # means the opposite - cheapest genuinely first.
     order = []
-    if filt.price_max is not None:
+    if filt.prefer_cheap:
+        order.append(cars.c.price.asc())
+    elif filt.price_max is not None:
         order.append(cars.c.price.desc())
     order.append(cars.c.max_discount.desc().nullslast())
     order.append(cars.c.year.desc())
@@ -102,6 +117,7 @@ _RELAX_FIELD_ORDER = [
     "run_max",
     "seats_min",
     "family_friendly",
+    "prefer_cheap",
     "body_type",
     "year_min",
     "year_max",
@@ -121,6 +137,7 @@ _RELAX_FIELD_LABELS = {
     "run_max": "пробег",
     "seats_min": "количество мест",
     "family_friendly": "вместимость (семейный)",
+    "prefer_cheap": "бюджетное ограничение",
     "body_type": "тип кузова",
     "year_min": "год выпуска",
     "year_max": "год выпуска",

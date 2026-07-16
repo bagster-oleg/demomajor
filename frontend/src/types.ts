@@ -62,6 +62,7 @@ export interface CarFilter {
   seats_min: number | null;
   family_friendly: boolean | null;
   economical: boolean | null;
+  prefer_cheap: boolean | null;
   free_text_intent: string | null;
 }
 
