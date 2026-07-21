@@ -1,3 +1,4 @@
+from app.api.filter_sql import FEATURE_LABELS
 from app.api.schemas import CarFilter
 from app.config import settings
 from app.llm.client import get_client
@@ -14,6 +15,13 @@ def _enum_or_string(known_values: list[str]) -> dict:
         # would be rejected by validators that check enum membership.
         schema["enum"] = [*known_values, None]
     return schema
+
+
+def _array_of_strings(known_values: list[str] | None = None) -> dict:
+    items: dict = {"type": "string"}
+    if known_values:
+        items["enum"] = known_values
+    return {"type": ["array", "null"], "items": items}
 
 
 def _build_tool_schema(
@@ -37,14 +45,42 @@ def _build_tool_schema(
                 "year_min": {"type": ["integer", "null"]},
                 "year_max": {"type": ["integer", "null"]},
                 "run_max": {"type": ["integer", "null"], "description": "максимальный пробег, км"},
-                "mark_id": _enum_or_string(known_marks),
+                "mark_ids": {
+                    **_array_of_strings(),
+                    "description": (
+                        "список марок, если клиент называет одну или несколько через 'или' "
+                        "(например, 'Kia или Hyundai' -> ['Kia', 'Hyundai']). Указывай марки КАК "
+                        "ЕСТЬ, даже если их нет в списке в наличии - см. правило про marks ниже."
+                    ),
+                },
                 "body_type": _enum_or_string(known_body_types),
+                "exclude_body_types": {
+                    **_array_of_strings(known_body_types),
+                    "description": "типы кузова, которые клиент явно НЕ хочет ('не седан', 'кроме внедорожника')",
+                },
                 "color": _enum_or_string(known_colors),
+                "exclude_colors": {
+                    **_array_of_strings(known_colors),
+                    "description": "цвета, которые клиент явно НЕ хочет ('любой цвет кроме черного')",
+                },
                 "drive_type": _enum_or_string(known_drive_types),
                 "transmission_type": _enum_or_string(known_transmissions),
                 "fuel_type": _enum_or_string(known_fuel_types),
+                "required_features": {
+                    **_array_of_strings(FEATURE_LABELS),
+                    "description": (
+                        "список опций, которые клиент явно назвал (только из предложенного "
+                        "списка значений), например 'с подогревом сидений' -> ['подогрев сидений']"
+                    ),
+                },
                 "doors_count": {"type": ["integer", "null"]},
-                "owners_count_max": {"type": ["integer", "null"]},
+                "owners_count_max": {
+                    "type": ["integer", "null"],
+                    "description": (
+                        "максимальное число владельцев, если клиент явно просит машину с "
+                        "небольшой историей: 'один владелец', 'не менял хозяев', 'из одних рук' -> 1"
+                    ),
+                },
                 "engine_volume_min": {
                     "type": ["number", "null"],
                     "description": "минимальный объём двигателя в литрах, например 1.6",
@@ -80,6 +116,15 @@ def _build_tool_schema(
                         "конкретную сумму (например, 'недорогая первая машина', 'подешевле', "
                         "'бюджетный вариант'). Если названо конкретное число - используй "
                         "price_max, а не этот флаг."
+                    ),
+                },
+                "prefer_premium": {
+                    "type": ["boolean", "null"],
+                    "description": (
+                        "true, если клиент хочет подороже/топовую комплектацию, но НЕ назвал "
+                        "конкретную сумму ('подороже', 'топовая комплектация', 'что-то посолиднее'). "
+                        "Симметрично prefer_cheap. Если названа конкретная сумма - используй "
+                        "price_min, а не этот флаг."
                     ),
                 },
                 "free_text_intent": {
@@ -187,12 +232,13 @@ def _sanitize_partial_update(raw: dict) -> dict:
 # just because the SQL step, having lost the brand, happened to find SUVs.
 _CLAMP_FIELD_LABELS = {
     "city": "город",
-    "mark_id": "марка",
+    "mark_ids": "марка",
     "body_type": "тип кузова",
     "color": "цвет",
     "drive_type": "привод",
     "transmission_type": "коробка передач",
     "fuel_type": "тип двигателя",
+    "required_features": "дополнительные опции",
 }
 
 
@@ -214,10 +260,41 @@ def _apply_clamping(
             dropped.append(_CLAMP_FIELD_LABELS[field])
         return clamped
 
+    def _clamp_list_field(
+        field: str, values: list[str] | None, known_values: list[str], track_dropped: bool = True
+    ) -> list[str] | None:
+        """Clamp every entry in a list field the same way a single value is
+        clamped. Entries that don't match a real value are dropped from the
+        list (never left in as a SQL condition that can't possibly match);
+        for fields where losing an entry means losing something the client
+        explicitly asked for (mark_ids, required_features), that's reported
+        the same way a dropped single value is - so "Kia или Lamborghini"
+        with no Lamborghini in stock can't come back claiming a perfect
+        match just because Kia alone found something."""
+        if values is None:
+            return None
+        clamped: list[str] = []
+        any_dropped = False
+        for value in values:
+            result = _clamp_to_known(value, known_values)
+            if result is None:
+                any_dropped = True
+            else:
+                clamped.append(result)
+        if any_dropped and track_dropped:
+            dropped.append(_CLAMP_FIELD_LABELS[field])
+        return list(dict.fromkeys(clamped)) or None
+
     filt.city = _clamp_field("city", filt.city, known_cities)
     filt.body_type = _clamp_field("body_type", filt.body_type, known_body_types)
-    filt.mark_id = _clamp_field("mark_id", filt.mark_id, known_marks)
+    filt.exclude_body_types = _clamp_list_field(
+        "body_type", filt.exclude_body_types, known_body_types, track_dropped=False
+    )
+    filt.mark_ids = _clamp_list_field("mark_ids", filt.mark_ids, known_marks)
     filt.color = _clamp_field("color", filt.color, known_colors)
+    filt.exclude_colors = _clamp_list_field(
+        "color", filt.exclude_colors, known_colors, track_dropped=False
+    )
     filt.drive_type = _clamp_field(
         "drive_type", _normalize_synonym(filt.drive_type, _DRIVE_TYPE_SYNONYMS), known_drive_types
     )
@@ -228,6 +305,9 @@ def _apply_clamping(
     )
     filt.fuel_type = _clamp_field(
         "fuel_type", _normalize_synonym(filt.fuel_type, _FUEL_TYPE_SYNONYMS), known_fuel_types
+    )
+    filt.required_features = _clamp_list_field(
+        "required_features", filt.required_features, FEATURE_LABELS
     )
     return filt, dropped
 

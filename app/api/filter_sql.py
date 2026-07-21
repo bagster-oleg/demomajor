@@ -19,18 +19,53 @@ DEFAULT_CANDIDATE_LIMIT = 30
 ECONOMICAL_MAX_ENGINE_L = 1.6  # "экономичный" -> small engine, a real number
 FAMILY_MIN_SEATS = 5  # "семейный" -> room for a family
 
+# Curated feature vocabulary for "с подогревом сидений"/"панорамная крыша"
+# style requests. extras is one long free-text option list per car (not a
+# clean enum), so instead of an LLM enum over the full real vocabulary
+# (hundreds of distinct option strings), we hand-pick the common, well-
+# understood asks and map each to a substring pattern verified against real
+# feed data - still a real, deterministic match against the actual extras
+# text, just via a fixed label set rather than a DB-derived one.
+FEATURE_KEYWORDS = {
+    "панорамная крыша": "панорам",
+    "люк": "люк",
+    "подогрев сидений": "подогрев%сидени",
+    "вентиляция сидений": "вентиляция%сидени",
+    "кожаный салон": "кожа (материал салона)",
+    "камера": "камера",
+    "круиз-контроль": "круиз-контроль",
+    "навигация": "навигационная система",
+    "подогрев руля": "обогрев рулевого колеса",
+    "беспроводная зарядка": "беспроводная зарядка",
+}
+FEATURE_LABELS = list(FEATURE_KEYWORDS)
+
 
 def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT):
     conditions = [cars.c.is_active.is_(True)]
 
     if filt.city:
         conditions.append(cars.c.city == filt.city)
-    if filt.mark_id:
-        conditions.append(func.lower(cars.c.mark_id) == filt.mark_id.lower())
+    if filt.mark_ids:
+        # OR across brands ("Kia или Hyundai") - any one of them matches.
+        conditions.append(func.lower(cars.c.mark_id).in_([m.lower() for m in filt.mark_ids]))
     if filt.body_type:
         conditions.append(cars.c.body_type.ilike(f"%{filt.body_type}%"))
+    if filt.exclude_body_types:
+        for excluded in filt.exclude_body_types:
+            conditions.append(~cars.c.body_type.ilike(f"%{excluded}%"))
     if filt.color:
         conditions.append(func.lower(cars.c.color) == filt.color.lower())
+    if filt.exclude_colors:
+        conditions.append(
+            func.lower(cars.c.color).not_in([c.lower() for c in filt.exclude_colors])
+        )
+    if filt.required_features:
+        # AND across features - the client asked for all of them together.
+        for label in filt.required_features:
+            pattern = FEATURE_KEYWORDS.get(label)
+            if pattern:
+                conditions.append(cars.c.extras.ilike(f"%{pattern}%"))
     if filt.drive_type:
         conditions.append(cars.c.drive_type == filt.drive_type)
     if filt.transmission_type:
@@ -79,6 +114,17 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
             .scalar_subquery()
         )
         conditions.append(cars.c.price <= median_price)
+    if filt.prefer_premium and filt.price_min is None:
+        # Symmetric opposite of prefer_cheap: "топовая комплектация"/
+        # "подороже" with no stated number - cap at the real median price
+        # of currently matching stock instead of inventing a floor, same
+        # self-adjusting logic as prefer_cheap just on the other side.
+        median_price = (
+            select(func.percentile_cont(0.5).within_group(cars.c.price.asc()))
+            .where(and_(*conditions))
+            .scalar_subquery()
+        )
+        conditions.append(cars.c.price >= median_price)
 
     # Heuristic ordering: within budget, a higher price usually means a
     # better-equipped trim, so surface those first; break ties by discount
@@ -87,7 +133,7 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
     order = []
     if filt.prefer_cheap:
         order.append(cars.c.price.asc())
-    elif filt.price_max is not None:
+    elif filt.prefer_premium or filt.price_max is not None:
         order.append(cars.c.price.desc())
     order.append(cars.c.max_discount.desc().nullslast())
     order.append(cars.c.year.desc())
@@ -106,9 +152,11 @@ def fetch_candidates(conn: Connection, filt: CarFilter, limit: int = DEFAULT_CAN
 # `city` and `free_text_intent` are never touched here: city is an explicit
 # UI choice, and free_text_intent was never a SQL condition to begin with.
 _RELAX_FIELD_ORDER = [
+    "required_features",
     "doors_count",
     "owners_count_max",
     "color",
+    "exclude_colors",
     "fuel_type",
     "power_hp_min",
     "power_hp_max",
@@ -121,15 +169,19 @@ _RELAX_FIELD_ORDER = [
     "seats_min",
     "family_friendly",
     "prefer_cheap",
+    "prefer_premium",
     "body_type",
+    "exclude_body_types",
     "year_min",
     "year_max",
 ]
 
 _RELAX_FIELD_LABELS = {
+    "required_features": "дополнительные опции",
     "doors_count": "количество дверей",
     "owners_count_max": "число владельцев",
     "color": "цвет",
+    "exclude_colors": "исключение по цвету",
     "fuel_type": "тип двигателя",
     "power_hp_min": "мощность двигателя",
     "power_hp_max": "мощность двигателя",
@@ -142,11 +194,13 @@ _RELAX_FIELD_LABELS = {
     "seats_min": "количество мест",
     "family_friendly": "вместимость (семейный)",
     "prefer_cheap": "бюджетное ограничение",
+    "prefer_premium": "предпочтение по цене (дороже)",
     "body_type": "тип кузова",
+    "exclude_body_types": "исключение по кузову",
     "year_min": "год выпуска",
     "year_max": "год выпуска",
     "price_max": "бюджет",
-    "mark_id": "марка",
+    "mark_ids": "марка",
 }
 
 _PRICE_WIDEN_FACTOR = 1.2
@@ -190,9 +244,9 @@ def fetch_candidates_with_relaxation(
             return candidates, False, _dedupe(relaxed_labels)
         relaxed = widened
 
-    if relaxed.mark_id is not None:
-        relaxed = relaxed.model_copy(update={"mark_id": None})
-        relaxed_labels = relaxed_labels + [_RELAX_FIELD_LABELS["mark_id"]]
+    if relaxed.mark_ids is not None:
+        relaxed = relaxed.model_copy(update={"mark_ids": None})
+        relaxed_labels = relaxed_labels + [_RELAX_FIELD_LABELS["mark_ids"]]
         candidates = fetch_candidates(conn, relaxed, limit)
         if candidates:
             return candidates, False, _dedupe(relaxed_labels)

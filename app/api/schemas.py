@@ -16,9 +16,17 @@ class CarFilter(BaseModel):
     year_min: Optional[int] = None
     year_max: Optional[int] = None
     run_max: Optional[int] = None
-    mark_id: Optional[str] = None
+    # A list, not a single value - "Kia или Hyundai" is OR-across-brands,
+    # not a single mark. A one-element list covers the plain single-brand
+    # case exactly as before.
+    mark_ids: Optional[list[str]] = None
     body_type: Optional[str] = None
+    # "любой кузов кроме седана" - explicit negative preferences. Kept
+    # separate from body_type/color rather than folded into free_text_intent,
+    # so they become real NOT conditions instead of a fuzzy rerank hint.
+    exclude_body_types: Optional[list[str]] = None
     color: Optional[str] = None
+    exclude_colors: Optional[list[str]] = None
     drive_type: Optional[str] = None
     transmission_type: Optional[str] = None
     # "электро"/"гибрид"/"дизель"/"бензин" - real values derived during ETL
@@ -26,7 +34,12 @@ class CarFilter(BaseModel):
     # feed-native field. Needed so "электрокар"/"дизельный" queries filter
     # for real instead of only nudging the fuzzy rerank via free_text_intent.
     fuel_type: Optional[str] = None
+    # Curated equipment vocabulary (see FEATURE_KEYWORDS in
+    # app/api/filter_sql.py) - "с подогревом сидений"/"панорамная крыша"
+    # become a real ILIKE match against extras, not just a fuzzy rerank hint.
+    required_features: Optional[list[str]] = None
     doors_count: Optional[int] = None
+    # "один владелец"/"не менял хозяев" -> owners_count_max=1.
     owners_count_max: Optional[int] = None
     # Explicit numeric ranges the client can state directly ("двигатель не
     # менее 1.6 л", "от 200 л.с.", "минимум 7 мест"). Filtered on the real
@@ -48,6 +61,10 @@ class CarFilter(BaseModel):
     # matching stock, so it tracks whatever inventory actually has instead
     # of going stale like a hardcoded threshold would.
     prefer_cheap: Optional[bool] = None
+    # Symmetric opposite of prefer_cheap: "подороже"/"топовая комплектация"
+    # without a stated number - see filter_sql.py for the same median-price
+    # logic, just capping the lower bound instead of the upper one.
+    prefer_premium: Optional[bool] = None
     # Leftover fuzzy part of the query that doesn't map to a structured
     # field (e.g. "для дачи с прицепом") - reserved for the optional
     # phase-5 pgvector rerank over description/extras, unused for now.

@@ -25,6 +25,7 @@ _CANDIDATE_FIELDS = [
     "run",
     "owners_number",
     "state",
+    "extras",
     "price",
     "currency",
     "max_discount",

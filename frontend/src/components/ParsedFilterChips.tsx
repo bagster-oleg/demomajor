@@ -25,15 +25,23 @@ const DRIVE_LABELS: Record<string, string> = {
 function filterToChips(f: CarFilter): string[] {
   const chips: string[] = [];
 
-  if (f.mark_id) chips.push(f.mark_id);
+  if (f.mark_ids?.length) chips.push(f.mark_ids.join(' или '));
   if (f.body_type) chips.push(f.body_type.toLowerCase());
+  if (f.exclude_body_types?.length) {
+    chips.push(`не ${f.exclude_body_types.map((b) => b.toLowerCase()).join(', не ')}`);
+  }
   if (f.color) chips.push(f.color.toLowerCase());
+  if (f.exclude_colors?.length) {
+    chips.push(`любой цвет кроме: ${f.exclude_colors.map((c) => c.toLowerCase()).join(', ')}`);
+  }
   if (f.family_friendly) chips.push('семейный (5+ мест)');
   if (f.drive_type) chips.push(DRIVE_LABELS[f.drive_type] ?? f.drive_type);
   if (f.transmission_type) chips.push(f.transmission_type);
   if (f.fuel_type) chips.push(f.fuel_type);
+  if (f.required_features?.length) chips.push(...f.required_features);
   if (f.economical) chips.push('экономичный (двигатель ≤ 1.6 л)');
   if (f.prefer_cheap) chips.push('бюджетный (не дороже медианной цены в наличии)');
+  if (f.prefer_premium) chips.push('топовая комплектация (не дешевле медианной цены в наличии)');
 
   if (f.engine_volume_min != null && f.engine_volume_max != null) {
     chips.push(`двигатель ${f.engine_volume_min}–${f.engine_volume_max} л`);
@@ -70,7 +78,8 @@ function filterToChips(f: CarFilter): string[] {
 
   if (f.run_max != null) chips.push(`пробег до ${new Intl.NumberFormat('ru-RU').format(f.run_max)} км`);
   if (f.doors_count != null) chips.push(`${f.doors_count} дв.`);
-  if (f.owners_count_max != null) chips.push(`до ${f.owners_count_max} владельцев`);
+  if (f.owners_count_max === 1) chips.push('один владелец');
+  else if (f.owners_count_max != null) chips.push(`до ${f.owners_count_max} владельцев`);
 
   return chips;
 }

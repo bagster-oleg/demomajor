@@ -93,7 +93,7 @@ def _fake_tool_response(tool_input: dict):
 
 
 def test_refine_query_merges_only_the_changed_field():
-    base = CarFilter(city="Москва", mark_id="Kia", price_max=1_000_000)
+    base = CarFilter(city="Москва", mark_ids=["Kia"], price_max=1_000_000)
     with patch("app.llm.parse_query.get_client") as mock_get_client:
         mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
             {"price_max": 700_000}
@@ -113,7 +113,7 @@ def test_refine_query_merges_only_the_changed_field():
     assert updated.price_max == 700_000
     # Untouched fields survive from the base filter - the model wasn't
     # asked to (and didn't) repeat them.
-    assert updated.mark_id == "Kia"
+    assert updated.mark_ids == ["Kia"]
     assert updated.city == "Москва"
     assert dropped == []
 
@@ -197,7 +197,7 @@ def test_refine_query_clamps_new_value_against_known_list():
 
 
 def test_parse_query_reports_dropped_field_when_brand_not_in_stock():
-    # Regression: "мерседес джип" - no Mercedes in stock. mark_id gets
+    # Regression: "мерседес джип" - no Mercedes in stock. mark_ids gets
     # clamped to None (correct - never filter on a brand that can't
     # exist), but that must be reported as a dropped constraint, not
     # silently treated as "no brand preference". Otherwise the SQL step
@@ -205,7 +205,7 @@ def test_parse_query_reports_dropped_field_when_brand_not_in_stock():
     # match despite having ignored the brand entirely.
     with patch("app.llm.parse_query.get_client") as mock_get_client:
         mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
-            {"mark_id": "Mercedes-Benz", "body_type": "Внедорожник 5 дв."}
+            {"mark_ids": ["Mercedes-Benz"], "body_type": "Внедорожник 5 дв."}
         )
         filt, dropped = parse_query(
             "мерседес джип",
@@ -218,7 +218,7 @@ def test_parse_query_reports_dropped_field_when_brand_not_in_stock():
             known_fuel_types=[],
         )
 
-    assert filt.mark_id is None
+    assert filt.mark_ids is None
     assert filt.body_type == "Внедорожник 5 дв."
     assert dropped == ["марка"]
 
@@ -246,3 +246,70 @@ def test_parse_query_electric_car_request_clamps_to_known_fuel_type():
     assert filt.fuel_type == "электро"
     assert filt.family_friendly is True
     assert dropped == []
+
+
+def test_parse_query_or_marks_partial_drop_when_one_brand_not_in_stock():
+    # "Kia или Lamborghini" - Kia is real stock, Lamborghini isn't. The
+    # surviving mark should stay in mark_ids, but the drop must still be
+    # reported (partial fulfilment isn't the same as "user got exactly
+    # what they asked for").
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {"mark_ids": ["Kia", "Lamborghini"]}
+        )
+        filt, dropped = parse_query(
+            "kia или ламборгини",
+            known_cities=[],
+            known_body_types=[],
+            known_marks=["Kia", "Hyundai"],
+            known_drive_types=[],
+            known_transmissions=[],
+            known_colors=[],
+            known_fuel_types=[],
+        )
+
+    assert filt.mark_ids == ["Kia"]
+    assert dropped == ["марка"]
+
+
+def test_parse_query_exclude_color_silently_clamped_without_affecting_exact_match():
+    # Excluding a color that isn't real stock changes nothing (there was
+    # never anything to exclude), so unlike mark_ids this must NOT be
+    # reported as a dropped constraint.
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {"exclude_colors": ["Черный", "Розовый"]}
+        )
+        filt, dropped = parse_query(
+            "любой цвет кроме черного и розового",
+            known_cities=[],
+            known_body_types=[],
+            known_marks=[],
+            known_drive_types=[],
+            known_transmissions=[],
+            known_colors=["Черный", "Белый"],
+            known_fuel_types=[],
+        )
+
+    assert filt.exclude_colors == ["Черный"]
+    assert dropped == []
+
+
+def test_parse_query_required_features_unknown_label_reported_as_dropped():
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {"required_features": ["панорамная крыша", "телепорт"]}
+        )
+        filt, dropped = parse_query(
+            "хочу панорамную крышу и телепорт",
+            known_cities=[],
+            known_body_types=[],
+            known_marks=[],
+            known_drive_types=[],
+            known_transmissions=[],
+            known_colors=[],
+            known_fuel_types=[],
+        )
+
+    assert filt.required_features == ["панорамная крыша"]
+    assert dropped == ["дополнительные опции"]

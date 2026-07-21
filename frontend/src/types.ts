@@ -49,12 +49,15 @@ export interface CarFilter {
   year_min: number | null;
   year_max: number | null;
   run_max: number | null;
-  mark_id: string | null;
+  mark_ids: string[] | null;
   body_type: string | null;
+  exclude_body_types: string[] | null;
   color: string | null;
+  exclude_colors: string[] | null;
   drive_type: string | null;
   transmission_type: string | null;
   fuel_type: string | null;
+  required_features: string[] | null;
   doors_count: number | null;
   owners_count_max: number | null;
   engine_volume_min: number | null;
@@ -65,6 +68,7 @@ export interface CarFilter {
   family_friendly: boolean | null;
   economical: boolean | null;
   prefer_cheap: boolean | null;
+  prefer_premium: boolean | null;
   free_text_intent: string | null;
 }
 

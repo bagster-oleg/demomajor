@@ -111,7 +111,7 @@ def test_search_with_relaxed_filter_reports_exact_match_false(seeded_cars):
     with patch("app.api.search.parse_query") as mock_parse, patch(
         "app.api.search.rank_and_explain"
     ) as mock_rank:
-        mock_parse.return_value = (CarFilter(city="Москва", mark_id="Kia", doors_count=3), [])
+        mock_parse.return_value = (CarFilter(city="Москва", mark_ids=["Kia"], doors_count=3), [])
         mock_rank.return_value = [{"unique_id": "1864081", "explanation": "ok"}]
 
         resp = client.post("/api/search", json={"query": "kia с 3 дверями"})

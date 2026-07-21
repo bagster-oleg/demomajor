@@ -33,7 +33,7 @@ def _seed_with_electric_car(conn):
 
 def test_exact_match_no_relaxation_needed(conn):
     _seed(conn)
-    filt = CarFilter(mark_id="Kia")
+    filt = CarFilter(mark_ids=["Kia"])
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert exact_match is True
     assert relaxed == []
@@ -46,7 +46,7 @@ def test_relaxes_impossible_doors_count_to_find_real_car(conn):
     # No car in the fixture has 3 doors - this must fall back rather than
     # returning nothing, since a real Kia Rio does exist without that
     # constraint.
-    filt = CarFilter(mark_id="Kia", doors_count=3)
+    filt = CarFilter(mark_ids=["Kia"], doors_count=3)
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert exact_match is False
     assert relaxed == ["количество дверей"]
@@ -58,7 +58,7 @@ def test_relaxes_multiple_fields_in_order(conn):
     _seed(conn)
     # Nothing has drive_type=4WD AND doors_count=3 AND mark_id=Kia (Kia Rio
     # has neither) - both must be dropped before anything turns up.
-    filt = CarFilter(mark_id="Kia", doors_count=3, drive_type="4WD")
+    filt = CarFilter(mark_ids=["Kia"], doors_count=3, drive_type="4WD")
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert exact_match is False
     assert set(relaxed) == {"количество дверей", "привод"}
@@ -70,7 +70,7 @@ def test_widens_price_before_dropping_mark(conn):
     # Real Kia Rio price is 650000 with no discount fields relevant here;
     # ask for an unrealistically tight budget just under it so relaxation
     # must widen price rather than immediately dropping the brand.
-    filt = CarFilter(mark_id="Kia", price_max=100)
+    filt = CarFilter(mark_ids=["Kia"], price_max=100)
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert exact_match is False
     assert "бюджет" in relaxed
@@ -95,7 +95,7 @@ def test_relaxation_never_returns_duplicate_labels(conn):
     _seed(conn)
     # year_min and year_max both map to the same human label - must be
     # deduped rather than shown twice.
-    filt = CarFilter(mark_id="Kia", year_min=2025, year_max=2025, doors_count=3)
+    filt = CarFilter(mark_ids=["Kia"], year_min=2025, year_max=2025, doors_count=3)
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert len(relaxed) == len(set(relaxed))
 
@@ -192,6 +192,106 @@ def test_fuel_type_petrol_excludes_the_electric_car(conn):
     candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
     assert exact_match is True
     assert "9999001" not in {c["unique_id"] for c in candidates}
+
+
+def test_mark_ids_or_matches_either_brand(conn):
+    # "Kia или Porsche" - a known gap discussed earlier: mark_id used to
+    # accept only one value at a time.
+    _seed(conn)
+    filt = CarFilter(mark_ids=["Kia", "Porsche"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert {c["mark_id"] for c in candidates} == {"Kia", "Porsche"}
+
+
+def test_mark_ids_single_value_still_works_like_old_mark_id(conn):
+    _seed(conn)
+    filt = CarFilter(mark_ids=["Kia"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["mark_id"] == "Kia"
+
+
+def test_exclude_colors_removes_matching_cars(conn):
+    # "любой цвет кроме белого" - the two white Nissans must be excluded,
+    # everything else stays.
+    _seed(conn)
+    filt = CarFilter(exclude_colors=["Белый"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 7
+    assert all(c["color"] != "Белый" for c in candidates)
+
+
+def test_exclude_body_types_removes_matching_cars(conn):
+    # "не хочу внедорожник" - 5 of the 9 fixture cars are "Внедорожник 5 дв."
+    _seed(conn)
+    filt = CarFilter(exclude_body_types=["Внедорожник 5 дв."])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 4
+    assert all(c["body_type"] != "Внедорожник 5 дв." for c in candidates)
+
+
+def test_required_features_single_match(conn):
+    # Only the EXEED has a panoramic roof in the fixture.
+    _seed(conn)
+    filt = CarFilter(required_features=["панорамная крыша"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["unique_id"] == "1862622"
+
+
+def test_required_features_are_anded_together(conn):
+    # Regression target: "хочу панорамную крышу и навигацию" must require
+    # BOTH, not either - only the EXEED has both in the fixture.
+    _seed(conn)
+    filt = CarFilter(required_features=["панорамная крыша", "навигация"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["unique_id"] == "1862622"
+
+
+def test_required_features_excludes_cars_missing_the_option(conn):
+    # Porsche Macan has no cruise control in the fixture - must be excluded
+    # when the client explicitly asks for it.
+    _seed(conn)
+    filt = CarFilter(required_features=["круиз-контроль"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert "1931764" not in {c["unique_id"] for c in candidates}
+
+
+def test_prefer_premium_excludes_the_cheap_half_of_stock(conn):
+    # Symmetric opposite of prefer_cheap: "топовая комплектация"/"подороже"
+    # with no stated number must exclude cheap cars, not include everything.
+    _seed(conn)
+    filt = CarFilter(prefer_premium=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    prices = {float(c["price"]) for c in candidates}
+    assert 650_000.0 not in prices  # Kia Rio - the cheapest car in stock
+    assert 5_100_000.0 in prices  # Audi A7 stays in the premium half
+
+
+def test_prefer_premium_orders_priciest_first(conn):
+    _seed(conn)
+    filt = CarFilter(prefer_premium=True)
+    candidates, _exact_match, _relaxed = fetch_candidates_with_relaxation(conn, filt)
+    prices = [float(c["price"]) for c in candidates]
+    assert prices == sorted(prices, reverse=True)
+
+
+def test_prefer_premium_ignored_when_explicit_price_min_given(conn):
+    _seed(conn)
+    filt = CarFilter(prefer_premium=True, price_min=500_000)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    prices = {float(c["price"]) for c in candidates}
+    assert 650_000.0 in prices  # Kia Rio - not excluded, price_min already satisfies it
 
 
 def test_prefer_cheap_excludes_the_expensive_half_of_stock(conn):
