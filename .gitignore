@@ -11,3 +11,4 @@ deploy/SERVER_ACCESS.md
 node_modules/
 dist/
 .DS_Store
+data/

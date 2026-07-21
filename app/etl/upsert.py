@@ -65,6 +65,12 @@ _UPDATE_COLUMNS = [
 ]
 
 
+# Postgres caps a single query at 65535 bound parameters. Each row binds
+# ~49 columns, so a real feed (1900+ cars) blows past that in one INSERT -
+# chunk the batch to stay well under the limit regardless of column count.
+_UPSERT_CHUNK_SIZE = 500
+
+
 def upsert_cars(conn: Connection, records: list[CarRecord], run_started_at: datetime) -> int:
     """Upsert a batch of CarRecords (all belonging to the same city feed).
 
@@ -82,17 +88,20 @@ def upsert_cars(conn: Connection, records: list[CarRecord], run_started_at: date
         for record in records
     ]
 
-    stmt = insert(cars).values(rows)
-    update_set = {col: getattr(stmt.excluded, col) for col in _UPDATE_COLUMNS}
-    update_set["last_seen_at"] = stmt.excluded.last_seen_at
-    update_set["is_active"] = True
-    update_set["updated_at"] = func.now()
+    for i in range(0, len(rows), _UPSERT_CHUNK_SIZE):
+        chunk = rows[i : i + _UPSERT_CHUNK_SIZE]
+        stmt = insert(cars).values(chunk)
+        update_set = {col: getattr(stmt.excluded, col) for col in _UPDATE_COLUMNS}
+        update_set["last_seen_at"] = stmt.excluded.last_seen_at
+        update_set["is_active"] = True
+        update_set["updated_at"] = func.now()
 
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["city", "unique_id"],
-        set_=update_set,
-    )
-    conn.execute(stmt)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["city", "unique_id"],
+            set_=update_set,
+        )
+        conn.execute(stmt)
+
     # psycopg does not reliably report rowcount for multi-row INSERT ... ON
     # CONFLICT statements, so report the batch size we attempted to upsert.
     return len(records)

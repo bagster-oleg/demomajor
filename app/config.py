@@ -10,8 +10,11 @@ class Settings(BaseSettings):
 
     # city -> path/URL of its feed XML. Local file paths for now; swap a
     # value for an https:// URL once real feed endpoints are known.
+    # data/feeds/ is gitignored - the real Major feed lives there, not in
+    # the repo (it's large, goes stale, and this is meant to be fetched by
+    # the periodic ETL job eventually, not committed).
     feed_sources: dict[str, str] = {
-        "Москва": "fixtures/feed_msk.xml",
+        "Москва": "data/feeds/msk.xml",
     }
 
 

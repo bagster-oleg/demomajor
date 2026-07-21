@@ -180,7 +180,13 @@ def _transmission_type(modification_id: Optional[str]) -> Optional[str]:
 
 
 # Engine volume in litres, e.g. "3.0" / "1.5" in "1.5 CVT (105 л.с.)".
-_ENGINE_VOLUME_RE = re.compile(r"\b(\d\.\d)\b")
+# Diesel/hybrid modifications glue a suffix directly onto the number with
+# no space ("3.0d AT...", "1.5hyb AT..."), which breaks a plain \b word
+# boundary right after the digits - the optional (?:d|hyb)? absorbs that
+# before requiring the boundary. Pure electric cars ("Electro (430 кВт)")
+# genuinely have no displacement - None is the honest answer there, not a
+# parsing miss.
+_ENGINE_VOLUME_RE = re.compile(r"\b(\d\.\d)(?:d|hyb)?\b", re.IGNORECASE)
 # Engine power in horsepower, e.g. the 105 in "(105 л.с.)".
 _POWER_HP_RE = re.compile(r"\((\d+)\s*л\.?\s*с\.?\)", re.IGNORECASE)
 # Seat count from extras, e.g. "Количество мест: 5".
