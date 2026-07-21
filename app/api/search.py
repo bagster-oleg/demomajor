@@ -6,6 +6,7 @@ from app.api.filter_sql import (
     fetch_distinct_cities,
     fetch_distinct_colors,
     fetch_distinct_drive_types,
+    fetch_distinct_fuel_types,
     fetch_distinct_marks,
     fetch_distinct_transmissions,
 )
@@ -35,6 +36,7 @@ def _build_car_result(row: dict, explanation: str) -> CarResult:
         color=row["color"],
         drive_type=row["drive_type"],
         transmission_type=row["transmission_type"],
+        fuel_type=row["fuel_type"],
         doors_count=row["doors_count"],
         engine_volume_l=float(row["engine_volume_l"]) if row["engine_volume_l"] is not None else None,
         power_hp=row["power_hp"],
@@ -72,6 +74,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     known_drive_types = fetch_distinct_drive_types(conn)
     known_transmissions = fetch_distinct_transmissions(conn)
     known_colors = fetch_distinct_colors(conn)
+    known_fuel_types = fetch_distinct_fuel_types(conn)
 
     if request.previous_filter is not None:
         # Follow-up refinement ("а подешевле?") - update the existing
@@ -85,6 +88,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
             known_drive_types=known_drive_types,
             known_transmissions=known_transmissions,
             known_colors=known_colors,
+            known_fuel_types=known_fuel_types,
         )
     else:
         filt, dropped_fields = parse_query(
@@ -95,6 +99,7 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
             known_drive_types=known_drive_types,
             known_transmissions=known_transmissions,
             known_colors=known_colors,
+            known_fuel_types=known_fuel_types,
         )
 
     # An explicit city selector on the UI always wins over whatever the LLM

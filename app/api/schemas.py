@@ -21,6 +21,11 @@ class CarFilter(BaseModel):
     color: Optional[str] = None
     drive_type: Optional[str] = None
     transmission_type: Optional[str] = None
+    # "электро"/"гибрид"/"дизель"/"бензин" - real values derived during ETL
+    # from modification_id (see app/etl/feed_parser.py::_fuel_type), not a
+    # feed-native field. Needed so "электрокар"/"дизельный" queries filter
+    # for real instead of only nudging the fuzzy rerank via free_text_intent.
+    fuel_type: Optional[str] = None
     doors_count: Optional[int] = None
     owners_count_max: Optional[int] = None
     # Explicit numeric ranges the client can state directly ("двигатель не
@@ -77,6 +82,7 @@ class CarResult(BaseModel):
     color: Optional[str]
     drive_type: Optional[str]
     transmission_type: Optional[str]
+    fuel_type: Optional[str]
     doors_count: Optional[int]
     engine_volume_l: Optional[float]
     power_hp: Optional[int]

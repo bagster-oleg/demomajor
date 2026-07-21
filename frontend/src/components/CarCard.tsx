@@ -166,6 +166,12 @@ export function CarCard({ car, compareChecked, onToggleCompare, compareDisabled 
               <dd>{car.drive_type}</dd>
             </div>
           )}
+          {car.fuel_type && (
+            <div>
+              <dt>Тип двигателя</dt>
+              <dd>{car.fuel_type}</dd>
+            </div>
+          )}
           {car.engine_volume_l != null && (
             <div>
               <dt>Двигатель</dt>

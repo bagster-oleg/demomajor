@@ -7,6 +7,7 @@ from app.llm.parse_query import (
     _clamp_to_known,
     _normalize_synonym,
     _DRIVE_TYPE_SYNONYMS,
+    _FUEL_TYPE_SYNONYMS,
     _TRANSMISSION_SYNONYMS,
     parse_query,
     refine_query,
@@ -69,6 +70,18 @@ def test_drive_type_synonyms_normalize_to_4wd(user_value):
     assert _normalize_synonym(user_value, _DRIVE_TYPE_SYNONYMS) == "4WD"
 
 
+@pytest.mark.parametrize(
+    "user_value", ["электрокар", "электромобиль", "электрический", "на электричестве"]
+)
+def test_fuel_type_synonyms_normalize_to_elektro(user_value):
+    assert _normalize_synonym(user_value, _FUEL_TYPE_SYNONYMS) == "электро"
+
+
+@pytest.mark.parametrize("user_value", ["дизельный", "дизель"])
+def test_fuel_type_synonyms_normalize_to_dizel(user_value):
+    assert _normalize_synonym(user_value, _FUEL_TYPE_SYNONYMS) == "дизель"
+
+
 def _fake_tool_response(tool_input: dict):
     block = MagicMock()
     block.type = "tool_use"
@@ -94,6 +107,7 @@ def test_refine_query_merges_only_the_changed_field():
             known_drive_types=[],
             known_transmissions=[],
             known_colors=[],
+            known_fuel_types=[],
         )
 
     assert updated.price_max == 700_000
@@ -119,6 +133,7 @@ def test_refine_query_explicit_null_clears_a_constraint():
             known_drive_types=[],
             known_transmissions=[],
             known_colors=[],
+            known_fuel_types=[],
         )
 
     assert updated.price_max is None
@@ -146,6 +161,7 @@ def test_refine_query_string_literal_null_is_treated_as_real_none():
             known_drive_types=[],
             known_transmissions=[],
             known_colors=[],
+            known_fuel_types=[],
         )
 
     assert updated.price_max is None
@@ -170,6 +186,7 @@ def test_refine_query_clamps_new_value_against_known_list():
             known_drive_types=[],
             known_transmissions=["автомат", "механика"],
             known_colors=[],
+            known_fuel_types=[],
         )
 
     # Clamped to None rather than silently filtering on a value that can
@@ -198,8 +215,34 @@ def test_parse_query_reports_dropped_field_when_brand_not_in_stock():
             known_drive_types=[],
             known_transmissions=[],
             known_colors=[],
+            known_fuel_types=[],
         )
 
     assert filt.mark_id is None
     assert filt.body_type == "Внедорожник 5 дв."
     assert dropped == ["марка"]
+
+
+def test_parse_query_electric_car_request_clamps_to_known_fuel_type():
+    # Regression: "хочу электрокар но так что бы семейная вместительная"
+    # returned Cadillac/Rolls-Royce/BMW petrol-diesel giants because
+    # fuel_type didn't exist as a field at all - the model's raw
+    # "электрокар" must normalize+clamp to the real DB value "электро".
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {"fuel_type": "электрокар", "family_friendly": True}
+        )
+        filt, dropped = parse_query(
+            "хочу электрокар но так что бы семейная вместительная",
+            known_cities=[],
+            known_body_types=[],
+            known_marks=[],
+            known_drive_types=[],
+            known_transmissions=[],
+            known_colors=[],
+            known_fuel_types=["электро", "гибрид", "дизель", "бензин"],
+        )
+
+    assert filt.fuel_type == "электро"
+    assert filt.family_friendly is True
+    assert dropped == []

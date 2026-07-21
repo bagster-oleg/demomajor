@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.api.filter_sql import fetch_candidates_with_relaxation
 from app.api.schemas import CarFilter
-from app.etl.feed_parser import parse_feed_file
+from app.etl.feed_parser import parse_feed_bytes, parse_feed_file
 from app.etl.upsert import sync_city_feed
 
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "feed_msk.xml"
@@ -10,6 +10,24 @@ FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "feed_msk.xml"
 
 def _seed(conn):
     records = parse_feed_file(FIXTURE, city="Москва")
+    sync_city_feed(conn, records, city="Москва")
+
+
+_ELECTRIC_CAR_XML = """<Data><cars><car>
+    <unique_id>9999001</unique_id>
+    <mark_id>Voyah</mark_id>
+    <folder_id>Dream, I</folder_id>
+    <modification_id>108.7 kWh Electro AT (320 кВт) 4WD</modification_id>
+    <body_type>Внедорожник 5 дв.</body_type>
+    <price>4600000</price>
+    <year>2024</year>
+    <extras>Количество мест: 7</extras>
+</car></cars></Data>""".encode()
+
+
+def _seed_with_electric_car(conn):
+    records = parse_feed_file(FIXTURE, city="Москва")
+    records += parse_feed_bytes(_ELECTRIC_CAR_XML, city="Москва", feed_source="electric.xml")
     sync_city_feed(conn, records, city="Москва")
 
 
@@ -141,6 +159,39 @@ def test_engine_volume_max_excludes_bigger_engines(conn):
     assert exact_match is True
     assert all(float(c["engine_volume_l"]) <= 1.5 for c in candidates)
     assert "1937189" not in {c["unique_id"] for c in candidates}  # Audi, 3.0L
+
+
+def test_fuel_type_filters_to_electric_only(conn):
+    # Regression: "хочу электрокар но семейная вместительная" used to
+    # return Cadillac/Rolls-Royce/BMW petrol-diesel giants because fuel
+    # type had no dedicated field at all - only free_text_intent, which
+    # never filters. fuel_type="электро" must exclude every petrol/diesel
+    # car in the fixture and keep only the real electric one.
+    _seed_with_electric_car(conn)
+    filt = CarFilter(fuel_type="электро")
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["mark_id"] == "Voyah"
+    assert candidates[0]["fuel_type"] == "электро"
+
+
+def test_fuel_type_and_family_friendly_compose(conn):
+    # The actual reported scenario: electric AND family/spacious (5+ seats).
+    _seed_with_electric_car(conn)
+    filt = CarFilter(fuel_type="электро", family_friendly=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["seats"] == 7
+
+
+def test_fuel_type_petrol_excludes_the_electric_car(conn):
+    _seed_with_electric_car(conn)
+    filt = CarFilter(fuel_type="бензин")
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert "9999001" not in {c["unique_id"] for c in candidates}
 
 
 def test_prefer_cheap_excludes_the_expensive_half_of_stock(conn):

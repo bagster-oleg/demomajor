@@ -61,6 +61,12 @@ cars = Table(
     Column("engine_volume_l", Numeric(3, 1)),
     Column("power_hp", SmallInteger),
     Column("seats", SmallInteger),
+    # Not a dedicated feed field either - "электро"/"гибрид"/"дизель"/"бензин"
+    # derived from tokens in modification_id (see
+    # app/etl/feed_parser.py::_fuel_type). Needed as a real filterable column
+    # because "электрокар"/"дизельный" queries were previously landing only
+    # in free_text_intent (fuzzy rerank, never an actual filter).
+    Column("fuel_type", Text),
     Column("description", Text),
     Column("extras", Text),
     Column("images", ARRAY(Text)),

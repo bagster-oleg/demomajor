@@ -17,6 +17,7 @@ export interface CarResult {
   color: string | null;
   drive_type: string | null;
   transmission_type: string | null;
+  fuel_type: string | null;
   doors_count: number | null;
   engine_volume_l: number | null;
   power_hp: number | null;
@@ -53,6 +54,7 @@ export interface CarFilter {
   color: string | null;
   drive_type: string | null;
   transmission_type: string | null;
+  fuel_type: string | null;
   doors_count: number | null;
   owners_count_max: number | null;
   engine_volume_min: number | null;

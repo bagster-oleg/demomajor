@@ -17,6 +17,7 @@ _CANDIDATE_FIELDS = [
     "color",
     "drive_type",
     "transmission_type",
+    "fuel_type",
     "engine_volume_l",
     "power_hp",
     "seats",

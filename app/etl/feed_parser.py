@@ -67,6 +67,7 @@ class CarRecord(BaseModel):
     engine_volume_l: Optional[float] = None
     power_hp: Optional[int] = None
     seats: Optional[int] = None
+    fuel_type: Optional[str] = None
     description: Optional[str] = None
     extras: Optional[str] = None
     images: list[str] = []
@@ -191,6 +192,14 @@ _ENGINE_VOLUME_RE = re.compile(r"\b(\d\.\d)(?:d|hyb)?\b", re.IGNORECASE)
 _POWER_HP_RE = re.compile(r"\((\d+)\s*л\.?\s*с\.?\)", re.IGNORECASE)
 # Seat count from extras, e.g. "Количество мест: 5".
 _SEATS_RE = re.compile(r"Количество\s+мест\s*:?\s*(\d+)", re.IGNORECASE)
+# Fuel type markers in modification_id: "Electro AT (430 кВт)...", "1.5hyb
+# CVT...", "3.0d AT...". Anything with none of these tokens is a
+# conventional petrol engine - the feed doesn't mark that explicitly, but
+# diesel/hybrid/electric are the only alternatives it does mark, so absence
+# of all three is a safe, honest default rather than a guess.
+_FUEL_ELECTRO_RE = re.compile(r"\bElectro\b", re.IGNORECASE)
+_FUEL_HYBRID_RE = re.compile(r"\d\.\dhyb\b", re.IGNORECASE)
+_FUEL_DIESEL_RE = re.compile(r"\d\.\dd\b", re.IGNORECASE)
 
 
 def _engine_volume_l(modification_id: Optional[str]) -> Optional[float]:
@@ -218,6 +227,22 @@ def _seats(extras: Optional[str]) -> Optional[int]:
         return None
     match = _SEATS_RE.search(extras)
     return int(match.group(1)) if match else None
+
+
+def _fuel_type(modification_id: Optional[str]) -> Optional[str]:
+    """Fuel/powertrain type, parsed from the same modification_id tokens
+    that drive engine volume - "электро"/"гибрид"/"дизель" if the marker is
+    present, else "бензин" (the feed's implicit default for everything
+    else). None only when modification_id itself is missing."""
+    if not modification_id:
+        return None
+    if _FUEL_ELECTRO_RE.search(modification_id):
+        return "электро"
+    if _FUEL_HYBRID_RE.search(modification_id):
+        return "гибрид"
+    if _FUEL_DIESEL_RE.search(modification_id):
+        return "дизель"
+    return "бензин"
 
 
 def _contact(node: etree._Element) -> tuple[Optional[str], Optional[str], Optional[str]]:
@@ -287,6 +312,7 @@ def parse_car_node(node: etree._Element, city: str, feed_source: str) -> CarReco
         engine_volume_l=_engine_volume_l(modification_id),
         power_hp=_power_hp(modification_id),
         seats=_seats(extras),
+        fuel_type=_fuel_type(modification_id),
         description=_text(node, "description"),
         extras=extras,
         images=_images(node),

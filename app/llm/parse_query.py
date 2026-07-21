@@ -23,6 +23,7 @@ def _build_tool_schema(
     known_drive_types: list[str],
     known_transmissions: list[str],
     known_colors: list[str],
+    known_fuel_types: list[str],
 ) -> dict:
     return {
         "name": TOOL_NAME,
@@ -41,6 +42,7 @@ def _build_tool_schema(
                 "color": _enum_or_string(known_colors),
                 "drive_type": _enum_or_string(known_drive_types),
                 "transmission_type": _enum_or_string(known_transmissions),
+                "fuel_type": _enum_or_string(known_fuel_types),
                 "doors_count": {"type": ["integer", "null"]},
                 "owners_count_max": {"type": ["integer", "null"]},
                 "engine_volume_min": {
@@ -111,6 +113,20 @@ _TRANSMISSION_SYNONYMS = {
     "ручку": "механика",
 }
 
+_FUEL_TYPE_SYNONYMS = {
+    "электро": "электро",
+    "электрокар": "электро",
+    "электромобиль": "электро",
+    "электрический": "электро",
+    "на электричестве": "электро",
+    "гибрид": "гибрид",
+    "гибридный": "гибрид",
+    "дизель": "дизель",
+    "дизельный": "дизель",
+    "бензин": "бензин",
+    "бензиновый": "бензин",
+}
+
 _DRIVE_TYPE_SYNONYMS = {
     "полный привод": "4WD",
     "полный": "4WD",
@@ -176,6 +192,7 @@ _CLAMP_FIELD_LABELS = {
     "color": "цвет",
     "drive_type": "привод",
     "transmission_type": "коробка передач",
+    "fuel_type": "тип двигателя",
 }
 
 
@@ -187,6 +204,7 @@ def _apply_clamping(
     known_drive_types: list[str],
     known_transmissions: list[str],
     known_colors: list[str],
+    known_fuel_types: list[str],
 ) -> tuple[CarFilter, list[str]]:
     dropped: list[str] = []
 
@@ -208,6 +226,9 @@ def _apply_clamping(
         _normalize_synonym(filt.transmission_type, _TRANSMISSION_SYNONYMS),
         known_transmissions,
     )
+    filt.fuel_type = _clamp_field(
+        "fuel_type", _normalize_synonym(filt.fuel_type, _FUEL_TYPE_SYNONYMS), known_fuel_types
+    )
     return filt, dropped
 
 
@@ -219,6 +240,7 @@ def parse_query(
     known_drive_types: list[str],
     known_transmissions: list[str],
     known_colors: list[str],
+    known_fuel_types: list[str],
 ) -> tuple[CarFilter, list[str]]:
     """Returns (filter, dropped_field_labels). `dropped_field_labels` lists
     any field the model asked for that isn't a real value in the DB (e.g.
@@ -226,7 +248,13 @@ def parse_query(
     the caller must treat that the same as an unsatisfied constraint, not
     silently degrade to "matches everything on this field"."""
     tool = _build_tool_schema(
-        known_cities, known_body_types, known_marks, known_drive_types, known_transmissions, known_colors
+        known_cities,
+        known_body_types,
+        known_marks,
+        known_drive_types,
+        known_transmissions,
+        known_colors,
+        known_fuel_types,
     )
 
     response = get_client().messages.create(
@@ -249,6 +277,7 @@ def parse_query(
                 known_drive_types,
                 known_transmissions,
                 known_colors,
+                known_fuel_types,
             )
 
     raise RuntimeError("LLM did not call extract_car_filter")
@@ -263,6 +292,7 @@ def refine_query(
     known_drive_types: list[str],
     known_transmissions: list[str],
     known_colors: list[str],
+    known_fuel_types: list[str],
 ) -> tuple[CarFilter, list[str]]:
     """Update `base_filter` with a follow-up refinement ("а подешевле?",
     "только с автоматом") instead of re-parsing from scratch - the model is
@@ -271,7 +301,13 @@ def refine_query(
     prior value; a field explicitly set to null clears that constraint).
     """
     tool = _build_tool_schema(
-        known_cities, known_body_types, known_marks, known_drive_types, known_transmissions, known_colors
+        known_cities,
+        known_body_types,
+        known_marks,
+        known_drive_types,
+        known_transmissions,
+        known_colors,
+        known_fuel_types,
     )
 
     user_content = (
@@ -305,6 +341,7 @@ def refine_query(
                 known_drive_types,
                 known_transmissions,
                 known_colors,
+                known_fuel_types,
             )
 
     raise RuntimeError("LLM did not call extract_car_filter")

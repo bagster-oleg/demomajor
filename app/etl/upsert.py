@@ -45,6 +45,7 @@ _UPDATE_COLUMNS = [
     "engine_volume_l",
     "power_hp",
     "seats",
+    "fuel_type",
     "description",
     "extras",
     "images",

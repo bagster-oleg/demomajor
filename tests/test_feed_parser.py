@@ -112,6 +112,46 @@ def test_optional_fields_missing_on_some_cars():
     assert kaiyi.complectation_name == "Standard"
 
 
+def test_fuel_type_defaults_to_petrol_when_no_marker():
+    records = parse_feed_file(FIXTURE, city="Москва")
+    # None of the fixture cars have a diesel/hybrid/electric marker in
+    # modification_id - the feed's implicit default is a petrol engine.
+    audi = next(r for r in records if r.unique_id == "1937189")
+    assert audi.modification_id == "55 TFSI 3.0 AMT (340 л.с.) 4WD"
+    assert audi.fuel_type == "бензин"
+
+
+def _single_car_xml(modification_id: str) -> bytes:
+    return f"""<Data><cars><car>
+        <unique_id>1</unique_id>
+        <mark_id>Test</mark_id>
+        <folder_id>Model</folder_id>
+        <modification_id>{modification_id}</modification_id>
+    </car></cars></Data>""".encode()
+
+
+def test_fuel_type_diesel_marker():
+    # Regression: "хочу электрокар" surfaced that fuel type had no dedicated
+    # field at all - a diesel modification like "3.0d AT..." must resolve
+    # to "дизель", not fall through to the petrol default.
+    records = parse_feed_bytes(_single_car_xml("3.0d AT (249 л.с.) 4WD"), city="Москва", feed_source="t.xml")
+    assert records[0].fuel_type == "дизель"
+
+
+def test_fuel_type_hybrid_marker():
+    records = parse_feed_bytes(_single_car_xml("1.5hyb CVT (190 л.с.)"), city="Москва", feed_source="t.xml")
+    assert records[0].fuel_type == "гибрид"
+
+
+def test_fuel_type_electro_marker():
+    # Regression: "хочу электрокар" - a pure-electric modification like
+    # "Electro AT (430 кВт) 4WD" has no litre displacement at all, but must
+    # still resolve fuel_type to "электро" so it can actually be filtered on.
+    records = parse_feed_bytes(_single_car_xml("Electro AT (430 кВт) 4WD"), city="Москва", feed_source="t.xml")
+    assert records[0].fuel_type == "электро"
+    assert records[0].engine_volume_l is None
+
+
 def test_parse_feed_bytes_missing_required_field_raises():
     xml = b"""<Data><cars><car>
         <mark_id>KIA</mark_id>

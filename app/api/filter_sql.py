@@ -35,6 +35,8 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(cars.c.drive_type == filt.drive_type)
     if filt.transmission_type:
         conditions.append(cars.c.transmission_type == filt.transmission_type)
+    if filt.fuel_type:
+        conditions.append(func.lower(cars.c.fuel_type) == filt.fuel_type.lower())
     if filt.year_min is not None:
         conditions.append(cars.c.year >= filt.year_min)
     if filt.year_max is not None:
@@ -107,6 +109,7 @@ _RELAX_FIELD_ORDER = [
     "doors_count",
     "owners_count_max",
     "color",
+    "fuel_type",
     "power_hp_min",
     "power_hp_max",
     "engine_volume_min",
@@ -127,6 +130,7 @@ _RELAX_FIELD_LABELS = {
     "doors_count": "количество дверей",
     "owners_count_max": "число владельцев",
     "color": "цвет",
+    "fuel_type": "тип двигателя",
     "power_hp_min": "мощность двигателя",
     "power_hp_max": "мощность двигателя",
     "engine_volume_min": "объём двигателя",
@@ -254,6 +258,16 @@ def fetch_distinct_drive_types(conn: Connection) -> list[str]:
         .where(and_(cars.c.is_active.is_(True), cars.c.drive_type.is_not(None)))
         .distinct()
         .order_by(cars.c.drive_type)
+    )
+    return [row[0] for row in conn.execute(stmt).all()]
+
+
+def fetch_distinct_fuel_types(conn: Connection) -> list[str]:
+    stmt = (
+        select(cars.c.fuel_type)
+        .where(and_(cars.c.is_active.is_(True), cars.c.fuel_type.is_not(None)))
+        .distinct()
+        .order_by(cars.c.fuel_type)
     )
     return [row[0] for row in conn.execute(stmt).all()]
 
