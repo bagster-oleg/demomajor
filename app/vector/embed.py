@@ -9,6 +9,13 @@ from fastembed import TextEmbedding
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+# fastembed's default batch_size (256) runs that many texts through the ONNX
+# model in one forward pass - fine on a dev machine, but the production box
+# is a ~2GB-RAM/no-swap VPS that has already OOM-killed on this exact model
+# at a handful of records. A small batch caps peak memory per forward pass
+# regardless of how many cars the feed grows to.
+_EMBED_BATCH_SIZE = 16
+
 
 @lru_cache
 def _model() -> TextEmbedding:
@@ -27,10 +34,10 @@ def build_embedding_text(description: str | None, extras: str | None) -> str:
 
 
 def embed_text(text: str) -> list[float]:
-    return next(iter(_model().embed([text]))).tolist()
+    return next(iter(_model().embed([text], batch_size=1))).tolist()
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
-    return [vec.tolist() for vec in _model().embed(texts)]
+    return [vec.tolist() for vec in _model().embed(texts, batch_size=_EMBED_BATCH_SIZE)]
