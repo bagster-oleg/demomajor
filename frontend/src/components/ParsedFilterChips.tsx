@@ -26,6 +26,7 @@ function filterToChips(f: CarFilter): string[] {
   const chips: string[] = [];
 
   if (f.mark_ids?.length) chips.push(f.mark_ids.join(' или '));
+  if (f.exclude_mark_ids?.length) chips.push(`не ${f.exclude_mark_ids.join(', не ')}`);
   if (f.body_type) chips.push(f.body_type.toLowerCase());
   if (f.exclude_body_types?.length) {
     chips.push(`не ${f.exclude_body_types.map((b) => b.toLowerCase()).join(', не ')}`);
@@ -39,7 +40,12 @@ function filterToChips(f: CarFilter): string[] {
   if (f.transmission_type) chips.push(f.transmission_type);
   if (f.fuel_type) chips.push(f.fuel_type);
   if (f.required_features?.length) chips.push(...f.required_features);
+  if (f.complectation_keyword) chips.push(`комплектация: ${f.complectation_keyword}`);
   if (f.economical) chips.push('экономичный (двигатель ≤ 1.6 л)');
+  if (f.recent_only) chips.push('новая машина (недавние годы выпуска)');
+  if (f.low_mileage) chips.push('маленький пробег');
+  if (f.not_registered_in_russia === true) chips.push('не зарегистрирован в РФ');
+  if (f.not_registered_in_russia === false) chips.push('зарегистрирован в РФ');
   if (f.prefer_cheap) chips.push('бюджетный (не дороже медианной цены в наличии)');
   if (f.prefer_premium) chips.push('топовая комплектация (не дешевле медианной цены в наличии)');
 

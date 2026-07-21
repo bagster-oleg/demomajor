@@ -198,6 +198,12 @@ export function CarCard({ car, compareChecked, onToggleCompare, compareDisabled 
               <dd>{car.custom}</dd>
             </div>
           )}
+          {car.not_registered_in_russia && (
+            <div>
+              <dt>Регистрация</dt>
+              <dd>не зарегистрирован в РФ</dd>
+            </div>
+          )}
         </dl>
 
         {extrasList.length > 0 && (

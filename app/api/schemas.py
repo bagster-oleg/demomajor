@@ -20,6 +20,9 @@ class CarFilter(BaseModel):
     # not a single mark. A one-element list covers the plain single-brand
     # case exactly as before.
     mark_ids: Optional[list[str]] = None
+    # "не хочу BMW" - a real negative preference, distinct from mark_ids
+    # (which is what the client DOES want).
+    exclude_mark_ids: Optional[list[str]] = None
     body_type: Optional[str] = None
     # "любой кузов кроме седана" - explicit negative preferences. Kept
     # separate from body_type/color rather than folded into free_text_intent,
@@ -38,6 +41,17 @@ class CarFilter(BaseModel):
     # app/api/filter_sql.py) - "с подогревом сидений"/"панорамная крыша"
     # become a real ILIKE match against extras, not just a fuzzy rerank hint.
     required_features: Optional[list[str]] = None
+    # Raw substring against complectation_name (per-model trim label, e.g.
+    # "Comfort", "Люкс") - too many distinct real values across 70+ brands
+    # to enumerate as a clamp list, so this passes through as-is like
+    # mark_ids and just becomes a real ILIKE (matches genuine trims or
+    # nothing, never a false positive on an invented one).
+    complectation_keyword: Optional[str] = None
+    # "серый привоз"/"не для РФ" - a real boolean column in the feed
+    # (not_registered_in_russia). Only ~0.2% of stock is true, so this is a
+    # genuine signal, unlike `state`/`custom` which are constant across the
+    # entire feed and therefore not worth exposing as filters at all.
+    not_registered_in_russia: Optional[bool] = None
     doors_count: Optional[int] = None
     # "один владелец"/"не менял хозяев" -> owners_count_max=1.
     owners_count_max: Optional[int] = None
@@ -55,6 +69,12 @@ class CarFilter(BaseModel):
     # app/api/filter_sql.py for the exact thresholds.
     family_friendly: Optional[bool] = None
     economical: Optional[bool] = None
+    # "новая машина", "свежая" -> year >= current_year - N (real threshold
+    # in filter_sql.py, not an LLM-guessed year).
+    recent_only: Optional[bool] = None
+    # "почти не ездили", "маленький пробег" WITHOUT a stated number - like
+    # prefer_cheap, a real code-owned threshold rather than an invented one.
+    low_mileage: Optional[bool] = None
     # "недорогая", "бюджетная", "подешевле" WITHOUT a stated number - unlike
     # price_max (an explicit number from the client), this doesn't invent a
     # cutoff: filter_sql computes it as the real median price of currently
@@ -109,6 +129,7 @@ class CarResult(BaseModel):
     owners_number: Optional[str]
     state: Optional[str]
     custom: Optional[str]
+    not_registered_in_russia: Optional[bool]
     extras: Optional[str]
     price: float
     currency: Optional[str]

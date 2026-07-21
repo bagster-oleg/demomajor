@@ -6,6 +6,8 @@ facts, not vibes.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import and_, func, select
 from sqlalchemy.engine import Connection
 
@@ -13,11 +15,21 @@ from app.api.schemas import CarFilter
 from app.db.models import cars
 
 DEFAULT_CANDIDATE_LIMIT = 30
+# Used instead of DEFAULT_CANDIDATE_LIMIT when free_text_intent is set: the
+# SQL ORDER BY here is a crude price/discount/year heuristic, not a
+# relevance score - if it truncated to 30 before the embedding-based rerank
+# ever ran, a genuinely better semantic match sitting at position 31+ could
+# never be surfaced. Fetch a much bigger pool first, let the rerank sort by
+# actual similarity, then the caller truncates to what's shown/explained.
+FUZZY_RERANK_POOL_LIMIT = 300
 
-# Thresholds behind the two semantic preferences, kept in code (not guessed
-# by the LLM) so "экономичный"/"семейный" mean the same thing every time.
+# Thresholds behind the semantic preferences, kept in code (not guessed by
+# the LLM) so "экономичный"/"семейный"/"новая"/"почти не ездили" mean the
+# same thing every time.
 ECONOMICAL_MAX_ENGINE_L = 1.6  # "экономичный" -> small engine, a real number
 FAMILY_MIN_SEATS = 5  # "семейный" -> room for a family
+RECENT_MAX_AGE_YEARS = 2  # "новая"/"свежая машина" -> within the last N model years
+LOW_MILEAGE_MAX_RUN = 30_000  # "почти не ездили"/"маленький пробег" -> real km number
 
 # Curated feature vocabulary for "с подогревом сидений"/"панорамная крыша"
 # style requests. extras is one long free-text option list per car (not a
@@ -49,6 +61,10 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
     if filt.mark_ids:
         # OR across brands ("Kia или Hyundai") - any one of them matches.
         conditions.append(func.lower(cars.c.mark_id).in_([m.lower() for m in filt.mark_ids]))
+    if filt.exclude_mark_ids:
+        conditions.append(
+            func.lower(cars.c.mark_id).not_in([m.lower() for m in filt.exclude_mark_ids])
+        )
     if filt.body_type:
         conditions.append(cars.c.body_type.ilike(f"%{filt.body_type}%"))
     if filt.exclude_body_types:
@@ -66,6 +82,16 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
             pattern = FEATURE_KEYWORDS.get(label)
             if pattern:
                 conditions.append(cars.c.extras.ilike(f"%{pattern}%"))
+    if filt.complectation_keyword:
+        # Not clamped to a known list like color/body_type - complectation
+        # names are per-model trim labels (hundreds of distinct real
+        # values), too many to enumerate as an LLM enum. A real ILIKE
+        # against the actual column either matches genuine trims or matches
+        # nothing (handled honestly by the relaxation ladder), never a
+        # false positive on an invented value.
+        conditions.append(cars.c.complectation_name.ilike(f"%{filt.complectation_keyword}%"))
+    if filt.not_registered_in_russia is not None:
+        conditions.append(cars.c.not_registered_in_russia.is_(filt.not_registered_in_russia))
     if filt.drive_type:
         conditions.append(cars.c.drive_type == filt.drive_type)
     if filt.transmission_type:
@@ -102,6 +128,11 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(cars.c.engine_volume_l <= ECONOMICAL_MAX_ENGINE_L)
     if filt.family_friendly:
         conditions.append(cars.c.seats >= FAMILY_MIN_SEATS)
+    if filt.recent_only:
+        current_year = datetime.now(timezone.utc).year
+        conditions.append(cars.c.year >= current_year - RECENT_MAX_AGE_YEARS)
+    if filt.low_mileage:
+        conditions.append(cars.c.run <= LOW_MILEAGE_MAX_RUN)
     if filt.prefer_cheap and filt.price_max is None:
         # "недорогая"/"бюджетная" with no stated number - rather than invent
         # a cutoff, cap it at the real median price of currently matching
@@ -152,7 +183,10 @@ def fetch_candidates(conn: Connection, filt: CarFilter, limit: int = DEFAULT_CAN
 # `city` and `free_text_intent` are never touched here: city is an explicit
 # UI choice, and free_text_intent was never a SQL condition to begin with.
 _RELAX_FIELD_ORDER = [
+    "complectation_keyword",
     "required_features",
+    "not_registered_in_russia",
+    "exclude_mark_ids",
     "doors_count",
     "owners_count_max",
     "color",
@@ -163,11 +197,13 @@ _RELAX_FIELD_ORDER = [
     "engine_volume_min",
     "engine_volume_max",
     "economical",
+    "low_mileage",
     "drive_type",
     "transmission_type",
     "run_max",
     "seats_min",
     "family_friendly",
+    "recent_only",
     "prefer_cheap",
     "prefer_premium",
     "body_type",
@@ -177,7 +213,10 @@ _RELAX_FIELD_ORDER = [
 ]
 
 _RELAX_FIELD_LABELS = {
+    "complectation_keyword": "комплектация",
     "required_features": "дополнительные опции",
+    "not_registered_in_russia": "статус регистрации в РФ",
+    "exclude_mark_ids": "исключение по марке",
     "doors_count": "количество дверей",
     "owners_count_max": "число владельцев",
     "color": "цвет",
@@ -188,11 +227,13 @@ _RELAX_FIELD_LABELS = {
     "engine_volume_min": "объём двигателя",
     "engine_volume_max": "объём двигателя",
     "economical": "экономичность",
+    "low_mileage": "малый пробег",
     "drive_type": "привод",
     "transmission_type": "коробка передач",
     "run_max": "пробег",
     "seats_min": "количество мест",
     "family_friendly": "вместимость (семейный)",
+    "recent_only": "год выпуска (новая машина)",
     "prefer_cheap": "бюджетное ограничение",
     "prefer_premium": "предпочтение по цене (дороже)",
     "body_type": "тип кузова",

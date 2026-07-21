@@ -53,6 +53,10 @@ def _build_tool_schema(
                         "ЕСТЬ, даже если их нет в списке в наличии - см. правило про marks ниже."
                     ),
                 },
+                "exclude_mark_ids": {
+                    **_array_of_strings(),
+                    "description": "марки, которые клиент явно НЕ хочет ('не хочу BMW')",
+                },
                 "body_type": _enum_or_string(known_body_types),
                 "exclude_body_types": {
                     **_array_of_strings(known_body_types),
@@ -71,6 +75,34 @@ def _build_tool_schema(
                     "description": (
                         "список опций, которые клиент явно назвал (только из предложенного "
                         "списка значений), например 'с подогревом сидений' -> ['подогрев сидений']"
+                    ),
+                },
+                "complectation_keyword": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "название комплектации/трима как есть, если клиент явно его назвал "
+                        "('топовая комплектация Premium' -> 'Premium'). Не путай с prefer_premium - "
+                        "то про цену без конкретного названия, это - про конкретное имя комплектации."
+                    ),
+                },
+                "not_registered_in_russia": {
+                    "type": ["boolean", "null"],
+                    "description": (
+                        "true, если клиент явно просит непригнанный/незарегистрированный в РФ "
+                        "автомобиль ('серый привоз', 'не зарегистрирован в РФ'); false, если явно "
+                        "просит обратное ('только официально зарегистрированные в РФ')."
+                    ),
+                },
+                "recent_only": {
+                    "type": ["boolean", "null"],
+                    "description": "true, если клиент хочет 'новую'/'свежую' машину без конкретного года",
+                },
+                "low_mileage": {
+                    "type": ["boolean", "null"],
+                    "description": (
+                        "true, если клиент хочет машину с маленьким пробегом без конкретного числа "
+                        "('почти не ездили', 'маленький пробег'). Если названо конкретное число км - "
+                        "используй run_max, а не этот флаг."
                     ),
                 },
                 "doors_count": {"type": ["integer", "null"]},
@@ -291,6 +323,9 @@ def _apply_clamping(
         "body_type", filt.exclude_body_types, known_body_types, track_dropped=False
     )
     filt.mark_ids = _clamp_list_field("mark_ids", filt.mark_ids, known_marks)
+    filt.exclude_mark_ids = _clamp_list_field(
+        "mark_ids", filt.exclude_mark_ids, known_marks, track_dropped=False
+    )
     filt.color = _clamp_field("color", filt.color, known_colors)
     filt.exclude_colors = _clamp_list_field(
         "color", filt.exclude_colors, known_colors, track_dropped=False

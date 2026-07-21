@@ -27,6 +27,7 @@ export interface CarResult {
   owners_number: string | null;
   state: string | null;
   custom: string | null;
+  not_registered_in_russia: boolean | null;
   extras: string | null;
   price: number;
   currency: string | null;
@@ -50,6 +51,7 @@ export interface CarFilter {
   year_max: number | null;
   run_max: number | null;
   mark_ids: string[] | null;
+  exclude_mark_ids: string[] | null;
   body_type: string | null;
   exclude_body_types: string[] | null;
   color: string | null;
@@ -58,6 +60,8 @@ export interface CarFilter {
   transmission_type: string | null;
   fuel_type: string | null;
   required_features: string[] | null;
+  complectation_keyword: string | null;
+  not_registered_in_russia: boolean | null;
   doors_count: number | null;
   owners_count_max: number | null;
   engine_volume_min: number | null;
@@ -67,6 +71,8 @@ export interface CarFilter {
   seats_min: number | null;
   family_friendly: boolean | null;
   economical: boolean | null;
+  recent_only: boolean | null;
+  low_mileage: boolean | null;
   prefer_cheap: boolean | null;
   prefer_premium: boolean | null;
   free_text_intent: string | null;

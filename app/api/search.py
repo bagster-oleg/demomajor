@@ -1,6 +1,10 @@
+import logging
+
 from sqlalchemy.engine import Connection
 
 from app.api.filter_sql import (
+    DEFAULT_CANDIDATE_LIMIT,
+    FUZZY_RERANK_POOL_LIMIT,
     fetch_candidates_with_relaxation,
     fetch_distinct_body_types,
     fetch_distinct_cities,
@@ -14,6 +18,8 @@ from app.api.schemas import CarResult, Discounts, SearchRequest, SearchResponse
 from app.llm.parse_query import parse_query, refine_query
 from app.llm.rank_explain import rank_and_explain
 from app.vector.rerank import rerank_by_free_text_intent
+
+logger = logging.getLogger(__name__)
 
 # Safety valve for the rank/explain LLM call - not a business "top N", just
 # a bound on how many cars get sent through one prompt. Every candidate up
@@ -46,6 +52,7 @@ def _build_car_result(row: dict, explanation: str) -> CarResult:
         owners_number=row["owners_number"],
         state=row["state"],
         custom=row["custom"],
+        not_registered_in_russia=row["not_registered_in_russia"],
         extras=row["extras"],
         price=price,
         currency=row["currency"],
@@ -110,11 +117,20 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
         filt.city = request.city
         dropped_fields = [f for f in dropped_fields if f != "город"]
 
+    # If free_text_intent is set, the embedding rerank below needs a much
+    # bigger pool to actually work with - the SQL ORDER BY is only a crude
+    # price/discount/year heuristic, so truncating to the small default
+    # limit here would mean a genuinely better semantic match ranked 31st+
+    # by that heuristic never even reaches the rerank step.
+    pool_limit = FUZZY_RERANK_POOL_LIMIT if filt.free_text_intent else DEFAULT_CANDIDATE_LIMIT
+
     # If nothing matches the filter exactly, this deterministically loosens
     # it (cheapest constraints first) until something in stock does, rather
     # than just returning "no results" - real cars, never invented ones,
     # with an honest account of what had to give.
-    candidates, sql_exact_match, relaxed_fields = fetch_candidates_with_relaxation(conn, filt)
+    candidates, sql_exact_match, relaxed_fields = fetch_candidates_with_relaxation(
+        conn, filt, limit=pool_limit
+    )
 
     # A field the clamp step silently dropped (e.g. mark_id="Mercedes" - no
     # Mercedes in stock, so it never became a SQL condition at all) must
@@ -123,6 +139,19 @@ def search_cars(conn: Connection, request: SearchRequest) -> SearchResponse:
     # step, having lost the brand, still found SUVs.
     exact_match = sql_exact_match and not dropped_fields
     all_relaxed_fields = list(dict.fromkeys(dropped_fields + relaxed_fields))
+
+    # Cheap, low-cardinality gap-finding: log the query alongside what it
+    # actually parsed to and how well it matched, so real usage patterns
+    # (not just the ones we happened to test by hand) surface gaps between
+    # the pitch and actual behavior. No PII beyond the query text itself.
+    logger.info(
+        "search query=%r parsed_filter=%s exact_match=%s relaxed_fields=%s n_candidates=%d",
+        request.query,
+        filt.model_dump(exclude_none=True),
+        exact_match,
+        all_relaxed_fields,
+        len(candidates),
+    )
 
     if not candidates:
         return SearchResponse(

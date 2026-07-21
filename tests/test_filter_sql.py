@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.api.filter_sql import fetch_candidates_with_relaxation
@@ -28,6 +29,25 @@ _ELECTRIC_CAR_XML = """<Data><cars><car>
 def _seed_with_electric_car(conn):
     records = parse_feed_file(FIXTURE, city="Москва")
     records += parse_feed_bytes(_ELECTRIC_CAR_XML, city="Москва", feed_source="electric.xml")
+    sync_city_feed(conn, records, city="Москва")
+
+
+_LOW_MILEAGE_IMPORT_XML = """<Data><cars><car>
+    <unique_id>9999002</unique_id>
+    <mark_id>Toyota</mark_id>
+    <folder_id>Land Cruiser</folder_id>
+    <modification_id>4.0 AT (249 л.с.) 4WD</modification_id>
+    <body_type>Внедорожник 5 дв.</body_type>
+    <price>7500000</price>
+    <year>2023</year>
+    <run>5000</run>
+    <not_registered_in_russia>true</not_registered_in_russia>
+</car></cars></Data>""".encode()
+
+
+def _seed_with_low_mileage_import_car(conn):
+    records = parse_feed_file(FIXTURE, city="Москва")
+    records += parse_feed_bytes(_LOW_MILEAGE_IMPORT_XML, city="Москва", feed_source="import.xml")
     sync_city_feed(conn, records, city="Москва")
 
 
@@ -327,3 +347,73 @@ def test_prefer_cheap_ignored_when_explicit_price_max_given(conn):
     assert exact_match is True
     prices = {float(c["price"]) for c in candidates}
     assert 3_770_000.0 in prices  # Porsche Macan - under the explicit 5M cap
+
+
+def test_exclude_mark_ids_removes_matching_brand(conn):
+    # "не хочу BMW" (here: не хочу Kia) - the rest of the fixture stays.
+    _seed(conn)
+    filt = CarFilter(exclude_mark_ids=["Kia"])
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 8
+    assert "Kia" not in {c["mark_id"] for c in candidates}
+
+
+def test_recent_only_filters_to_recent_model_years(conn):
+    # "новая машина" without a stated year - only cars within the last
+    # RECENT_MAX_AGE_YEARS of the real current year should match.
+    _seed(conn)
+    current_year = datetime.now(timezone.utc).year
+    filt = CarFilter(recent_only=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert all(c["year"] >= current_year - 2 for c in candidates)
+
+
+def test_low_mileage_filters_to_real_low_mileage_car(conn):
+    # Every fixture car has 75k+ km - only the synthetic 5k-km import
+    # should match "почти не ездили" without a stated number.
+    _seed_with_low_mileage_import_car(conn)
+    filt = CarFilter(low_mileage=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["unique_id"] == "9999002"
+
+
+def test_not_registered_in_russia_filters_to_real_import(conn):
+    _seed_with_low_mileage_import_car(conn)
+    filt = CarFilter(not_registered_in_russia=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["unique_id"] == "9999002"
+
+
+def test_not_registered_in_russia_false_excludes_the_import(conn):
+    _seed_with_low_mileage_import_car(conn)
+    filt = CarFilter(not_registered_in_russia=False)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert "9999002" not in {c["unique_id"] for c in candidates}
+
+
+def test_complectation_keyword_matches_named_trim(conn):
+    # Real fixture data: Kaiyi has complectation_name "Standard", Kia Rio
+    # has "Comfort" - a raw substring match, not a clamped enum (too many
+    # distinct real trim names across brands to enumerate).
+    _seed(conn)
+    filt = CarFilter(complectation_keyword="Standard")
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert len(candidates) == 1
+    assert candidates[0]["unique_id"] == "1945413"
+
+
+def test_complectation_keyword_no_match_relaxes_honestly(conn):
+    _seed(conn)
+    filt = CarFilter(complectation_keyword="Nonexistent Trim Name")
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is False
+    assert "комплектация" in relaxed
+    assert len(candidates) > 0

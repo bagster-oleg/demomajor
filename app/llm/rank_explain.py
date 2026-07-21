@@ -25,6 +25,7 @@ _CANDIDATE_FIELDS = [
     "run",
     "owners_number",
     "state",
+    "not_registered_in_russia",
     "extras",
     "price",
     "currency",

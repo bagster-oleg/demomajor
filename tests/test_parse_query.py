@@ -313,3 +313,53 @@ def test_parse_query_required_features_unknown_label_reported_as_dropped():
 
     assert filt.required_features == ["панорамная крыша"]
     assert dropped == ["дополнительные опции"]
+
+
+def test_parse_query_exclude_mark_ids_silently_clamped_without_affecting_exact_match():
+    # Excluding a brand that isn't real stock changes nothing - must not be
+    # reported as a dropped constraint (unlike a positive mark_ids miss).
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {"exclude_mark_ids": ["Kia", "Lamborghini"]}
+        )
+        filt, dropped = parse_query(
+            "не хочу kia или ламборгини",
+            known_cities=[],
+            known_body_types=[],
+            known_marks=["Kia", "Hyundai"],
+            known_drive_types=[],
+            known_transmissions=[],
+            known_colors=[],
+            known_fuel_types=[],
+        )
+
+    assert filt.exclude_mark_ids == ["Kia"]
+    assert dropped == []
+
+
+def test_parse_query_passes_through_new_boolean_and_freeform_fields():
+    with patch("app.llm.parse_query.get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response(
+            {
+                "recent_only": True,
+                "low_mileage": True,
+                "not_registered_in_russia": True,
+                "complectation_keyword": "Premium",
+            }
+        )
+        filt, dropped = parse_query(
+            "новая машина с маленьким пробегом, серый привоз, комплектация Premium",
+            known_cities=[],
+            known_body_types=[],
+            known_marks=[],
+            known_drive_types=[],
+            known_transmissions=[],
+            known_colors=[],
+            known_fuel_types=[],
+        )
+
+    assert filt.recent_only is True
+    assert filt.low_mileage is True
+    assert filt.not_registered_in_russia is True
+    assert filt.complectation_keyword == "Premium"
+    assert dropped == []
