@@ -21,10 +21,12 @@ from app.vector.rerank import rerank_by_free_text_intent
 
 logger = logging.getLogger(__name__)
 
-# Safety valve for the rank/explain LLM call - not a business "top N", just
-# a bound on how many cars get sent through one prompt. Every candidate up
-# to this count gets explained; none are chosen/dropped as "not good enough".
-MAX_EXPLAINED_CANDIDATES = 15
+# Bounds how many cars get sent through one rank/explain LLM prompt -
+# every candidate up to this count gets explained, none are chosen/dropped
+# as "not good enough". Deliberately kept small (9) for the demo to limit
+# per-search LLM token spend/latency, not because 9 is a meaningful
+# business number.
+MAX_EXPLAINED_CANDIDATES = 9
 
 
 def _build_car_result(row: dict, explanation: str) -> CarResult:
