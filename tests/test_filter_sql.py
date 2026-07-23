@@ -417,3 +417,28 @@ def test_complectation_keyword_no_match_relaxes_honestly(conn):
     assert exact_match is False
     assert "комплектация" in relaxed
     assert len(candidates) > 0
+
+
+def test_safety_equipped_filters_to_full_safety_kit(conn):
+    # Regression: "недорогую и безопасную" surfaced that "безопасная" had
+    # no real home at all - it only landed in free_text_intent (fuzzy
+    # rerank, never a filter), so prefer_cheap alone decided the results
+    # and pulled in the cheapest cars regardless of actual safety
+    # equipment. safety_equipped requires ESP + both side and curtain
+    # airbags - real fixture data: only EXEED and both Nissans and the
+    # Porsche have all three; the rest have ESP alone at most.
+    _seed(conn)
+    filt = CarFilter(safety_equipped=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    assert {c["unique_id"] for c in candidates} == {"1862622", "1946052", "1937389", "1931764"}
+
+
+def test_safety_equipped_and_prefer_cheap_compose(conn):
+    # The actual reported scenario: cheap AND safety-equipped together.
+    _seed(conn)
+    filt = CarFilter(safety_equipped=True, prefer_cheap=True)
+    candidates, exact_match, relaxed = fetch_candidates_with_relaxation(conn, filt)
+    assert exact_match is True
+    ids = {c["unique_id"] for c in candidates}
+    assert ids.issubset({"1862622", "1946052", "1937389", "1931764"})

@@ -73,6 +73,7 @@ export interface CarFilter {
   economical: boolean | null;
   recent_only: boolean | null;
   low_mileage: boolean | null;
+  safety_equipped: boolean | null;
   prefer_cheap: boolean | null;
   prefer_premium: boolean | null;
   free_text_intent: string | null;

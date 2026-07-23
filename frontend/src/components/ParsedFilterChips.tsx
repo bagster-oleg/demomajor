@@ -44,6 +44,7 @@ function filterToChips(f: CarFilter): string[] {
   if (f.economical) chips.push('экономичный (двигатель ≤ 1.6 л)');
   if (f.recent_only) chips.push('новая машина (недавние годы выпуска)');
   if (f.low_mileage) chips.push('маленький пробег');
+  if (f.safety_equipped) chips.push('с ESP и доп. подушками безопасности');
   if (f.not_registered_in_russia === true) chips.push('не зарегистрирован в РФ');
   if (f.not_registered_in_russia === false) chips.push('зарегистрирован в РФ');
   if (f.prefer_cheap) chips.push('бюджетный (не дороже медианной цены в наличии)');

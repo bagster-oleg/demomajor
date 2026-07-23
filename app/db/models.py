@@ -87,6 +87,12 @@ cars = Table(
     # прицепом") - never used as the primary filter. Built from
     # description+extras, see app/vector/embed.py.
     Column("embedding", Vector(EMBEDDING_DIM)),
+    # sha256 of the exact text that produced `embedding` - lets the ETL skip
+    # re-embedding a car whose description/extras haven't actually changed
+    # since the last run (upsert_cars rewrites every column unconditionally
+    # on every run, so comparing raw column values can't tell "changed" from
+    # "resubmitted unchanged"; this can). See app/etl/embed_cars.py.
+    Column("embedding_text_hash", Text),
     Column("raw", JSONB, nullable=False),
     Column("feed_source", Text, nullable=False),
     Column("first_seen_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),

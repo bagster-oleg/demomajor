@@ -75,6 +75,11 @@ class CarFilter(BaseModel):
     # "почти не ездили", "маленький пробег" WITHOUT a stated number - like
     # prefer_cheap, a real code-owned threshold rather than an invented one.
     low_mileage: Optional[bool] = None
+    # "безопасная" - the feed has no crash-test/reliability data at all, so
+    # this maps to real safety EQUIPMENT instead (ESP + side/curtain
+    # airbags, see SAFETY_EQUIPMENT_PATTERNS in filter_sql.py) - an honest
+    # proxy grounded in actual hardware, not a fabricated safety rating.
+    safety_equipped: Optional[bool] = None
     # "недорогая", "бюджетная", "подешевле" WITHOUT a stated number - unlike
     # price_max (an explicit number from the client), this doesn't invent a
     # cutoff: filter_sql computes it as the real median price of currently

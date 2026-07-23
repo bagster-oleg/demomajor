@@ -31,6 +31,18 @@ FAMILY_MIN_SEATS = 5  # "семейный" -> room for a family
 RECENT_MAX_AGE_YEARS = 2  # "новая"/"свежая машина" -> within the last N model years
 LOW_MILEAGE_MAX_RUN = 30_000  # "почти не ездили"/"маленький пробег" -> real km number
 
+# "безопасная" has no crash-test/reliability data in the feed at all - we
+# deliberately never invent that (same principle as fuel-consumption
+# numbers). This is the honest real-equipment proxy instead: ESP (73% of
+# stock has it) plus side AND curtain airbags (59%/52%) - actual safety
+# hardware genuinely present or absent per car, not a guess about how safe
+# the car actually is.
+SAFETY_EQUIPMENT_PATTERNS = [
+    "система стабилизации",
+    "подушки безопасности боковые",
+    "подушки безопасности оконные",
+]
+
 # Curated feature vocabulary for "с подогревом сидений"/"панорамная крыша"
 # style requests. extras is one long free-text option list per car (not a
 # clean enum), so instead of an LLM enum over the full real vocabulary
@@ -133,6 +145,9 @@ def build_candidate_query(filt: CarFilter, limit: int = DEFAULT_CANDIDATE_LIMIT)
         conditions.append(cars.c.year >= current_year - RECENT_MAX_AGE_YEARS)
     if filt.low_mileage:
         conditions.append(cars.c.run <= LOW_MILEAGE_MAX_RUN)
+    if filt.safety_equipped:
+        for pattern in SAFETY_EQUIPMENT_PATTERNS:
+            conditions.append(cars.c.extras.ilike(f"%{pattern}%"))
     if filt.prefer_cheap and filt.price_max is None:
         # "недорогая"/"бюджетная" with no stated number - rather than invent
         # a cutoff, cap it at the real median price of currently matching
@@ -198,6 +213,7 @@ _RELAX_FIELD_ORDER = [
     "engine_volume_max",
     "economical",
     "low_mileage",
+    "safety_equipped",
     "drive_type",
     "transmission_type",
     "run_max",
@@ -228,6 +244,7 @@ _RELAX_FIELD_LABELS = {
     "engine_volume_max": "объём двигателя",
     "economical": "экономичность",
     "low_mileage": "малый пробег",
+    "safety_equipped": "оснащение безопасности (ESP, доп. подушки)",
     "drive_type": "привод",
     "transmission_type": "коробка передач",
     "run_max": "пробег",
