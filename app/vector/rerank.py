@@ -8,6 +8,20 @@ not dropped.
 """
 from app.vector.embed import embed_text
 
+# Regression: a full independent sort by similarity was completely
+# discarding whatever order the SQL step had already established (e.g.
+# prefer_cheap's cheapest-first, prefer_premium's priciest-first) - a car
+# could jump from the bottom of a 300-candidate pool to #1 purely because
+# its description happened to read like the fuzzy leftover text, even if
+# far cheaper/pricier options were sitting right there. The architecture
+# says this rerank is second priority, on top of the deterministic order,
+# never instead of it - reordering only *within* small bands (keeping the
+# bands themselves in their original relative order) is what actually
+# delivers that: cheap candidates stay ahead of pricier ones as a whole,
+# while the few most semantically relevant within each price tier surface
+# first.
+_RERANK_BAND_SIZE = 5
+
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
@@ -21,19 +35,26 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 def rank_candidates_by_vector(query_embedding: list[float], candidates: list[dict]) -> list[dict]:
     """Pure ordering logic, kept separate from embed_text() so it's
     testable without loading the actual embedding model."""
-    scored = []
-    unscored = []
-    for candidate in candidates:
-        vector = candidate.get("embedding")
-        if vector is None:
-            unscored.append(candidate)
-        else:
-            scored.append((_cosine_similarity(query_embedding, list(vector)), candidate))
+    result = []
+    for i in range(0, len(candidates), _RERANK_BAND_SIZE):
+        band = candidates[i : i + _RERANK_BAND_SIZE]
 
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-    # Candidates missing an embedding (e.g. ETL hasn't backfilled them yet)
-    # are kept, just pushed after every scored candidate rather than lost.
-    return [c for _, c in scored] + unscored
+        scored = []
+        unscored = []
+        for candidate in band:
+            vector = candidate.get("embedding")
+            if vector is None:
+                unscored.append(candidate)
+            else:
+                scored.append((_cosine_similarity(query_embedding, list(vector)), candidate))
+
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        # Candidates missing an embedding (e.g. ETL hasn't backfilled them
+        # yet) are kept, just pushed after every scored candidate in their
+        # band rather than lost.
+        result.extend([c for _, c in scored] + unscored)
+
+    return result
 
 
 def rerank_by_free_text_intent(free_text_intent: str | None, candidates: list[dict]) -> list[dict]:

@@ -50,3 +50,23 @@ def test_rank_candidates_never_drops_any_candidate():
     candidates = [{"unique_id": str(i), "embedding": [0.1 * i, 1.0, 0.0]} for i in range(5)]
     ranked = rank_candidates_by_vector(query, candidates)
     assert {c["unique_id"] for c in ranked} == {c["unique_id"] for c in candidates}
+
+
+def test_rerank_never_lets_a_later_band_outrank_an_earlier_one():
+    # Regression: "недорогую и безопасную ... подарок дочери на 18 летие" -
+    # a full independent sort by similarity let a pricier car near the
+    # bottom of a 300-candidate prefer_cheap pool jump to #1 purely because
+    # its description read like "подарок дочери", silently discarding
+    # prefer_cheap's cheapest-first SQL order entirely. Reordering must
+    # stay within small bands - a perfect semantic match sitting in a later
+    # (pricier) band can never outrank an earlier (cheaper) band, no matter
+    # how well it matches.
+    query = [1.0, 0.0]
+    band0 = [{"unique_id": f"cheap-{i}", "embedding": [0.0, 1.0]} for i in range(5)]  # all poor matches
+    band1 = [{"unique_id": "pricier-perfect-match", "embedding": [1.0, 0.0]}] + [
+        {"unique_id": f"pricier-{i}", "embedding": [0.0, 1.0]} for i in range(4)
+    ]
+    ranked = rank_candidates_by_vector(query, band0 + band1)
+    ranked_ids = [c["unique_id"] for c in ranked]
+    assert ranked_ids.index("pricier-perfect-match") >= 5
+    assert set(ranked_ids[:5]) == {f"cheap-{i}" for i in range(5)}
